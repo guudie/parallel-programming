@@ -185,6 +185,12 @@ void blurImg(uchar3 * inPixels, int width, int height, float * filter, int filte
 
 		dim3 gridSize((width - 1)/blockSize.x + 1, (height - 1)/blockSize.y + 1);
 		blurImgKernel<<<gridSize, blockSize>>>(d_inPixels, width, height, d_filter, filterWidth, d_outPixels);
+		cudaError_t errSync  = cudaGetLastError();
+		cudaError_t errAsync = cudaDeviceSynchronize();
+		if (errSync != cudaSuccess) 
+			printf("Sync kernel error: %s\n", cudaGetErrorString(errSync));
+		if (errAsync != cudaSuccess)
+			printf("Async kernel error: %s\n", cudaGetErrorString(errAsync));
 
 		CHECK(cudaMemcpy(outPixels, d_outPixels, width * height * sizeof(uchar3), cudaMemcpyDeviceToHost));
 

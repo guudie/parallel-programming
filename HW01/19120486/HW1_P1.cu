@@ -177,6 +177,12 @@ void convertRgb2Gray(uint8_t * inPixels, int width, int height,
 		// TODO: Set grid size and call kernel (remember to check kernel error)
 		dim3 gridSize((width - 1)/blockSize.x + 1, (height - 1)/blockSize.y + 1);
 		convertRgb2GrayKernel<<<gridSize, blockSize>>>(d_inPixels, width, height, d_outPixels);
+		cudaError_t errSync  = cudaGetLastError();
+		cudaError_t errAsync = cudaDeviceSynchronize();
+		if (errSync != cudaSuccess) 
+			printf("Sync kernel error: %s\n", cudaGetErrorString(errSync));
+		if (errAsync != cudaSuccess)
+			printf("Async kernel error: %s\n", cudaGetErrorString(errAsync));
 
 		// TODO: Copy result from device memories
 		CHECK(cudaMemcpy(outPixels, d_outPixels, width * height * sizeof(uint8_t), cudaMemcpyDeviceToHost));
