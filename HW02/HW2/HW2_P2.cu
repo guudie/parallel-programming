@@ -86,21 +86,44 @@ void addVec(int *in1, int *in2, int n,
         CHECK(cudaHostRegister(out, nBytes, cudaHostRegisterDefault));
 
 		// TODO: Allocate device memory regions
+        int *d_in1, *d_in2, *d_out;
+        CHECK(cudaMalloc(&d_in1, nBytes));
+        CHECK(cudaMalloc(&d_in2, nBytes));
+        CHECK(cudaMalloc(&d_out, nBytes));
 
         // TODO: Create "nStreams" device streams
+        cudaStream_t *streams = (cudaStream_t*)malloc(nStreams * sizeof(cudaStream_t));
+        for(int i = 0; i < nStreams; i++)
+            CHECK(cudaStreamCreate(streams + i));
 
         GpuTimer timer;
         timer.Start();
 
         // TODO: Send jobs (H2D, kernel, D2H) to device streams 
+        int arrSize = (n - 1) / nStreams + 1;
+        for(int i = 0; i < nStreams; i++) {
+            int offset = arrSize * i;
+            int streamedArrSize = i < nStreams - 1 ? arrSize : n - offset;
+            CHECK(cudaMemcpyAsync(d_in1 + offset, in1 + offset, streamedArrSize * sizeof(int), cudaMemcpyHostToDevice, streams[i]));
+            CHECK(cudaMemcpyAsync(d_in2 + offset, in2 + offset, streamedArrSize * sizeof(int), cudaMemcpyHostToDevice, streams[i]));
+            dim3 gridSize((streamedArrSize - 1) / blockSize.x + 1);
+            addVecKernel<<<gridSize, blockSize, 0, streams[i]>>>(d_in1 + offset, d_in2 + offset, streamedArrSize, d_out + offset);
+            CHECK(cudaMemcpyAsync(out + offset, d_out + offset, streamedArrSize * sizeof(int), cudaMemcpyDeviceToHost, streams[i]));
+        }
 
         timer.Stop();
         float time = timer.Elapsed();
         printf("Processing time of all device streams: %f ms\n\n", time);
 
         // TODO: Destroy device streams
+        for(int i = 0; i < nStreams; i++)
+            CHECK(cudaStreamDestroy(streams[i]));
+        free(streams);
 
         // TODO: Free device memory regions
+        CHECK(cudaFree(d_in1));
+        CHECK(cudaFree(d_in2));
+        CHECK(cudaFree(d_out));
 
         // Unpin host memory regions
         CHECK(cudaHostUnregister(in1));
