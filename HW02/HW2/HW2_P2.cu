@@ -100,15 +100,16 @@ void addVec(int *in1, int *in2, int n,
         timer.Start();
 
         // TODO: Send jobs (H2D, kernel, D2H) to device streams 
-        int arrSize = (n - 1) / nStreams + 1;
+        int r = n % nStreams;
+        int offset = 0;
         for(int i = 0; i < nStreams; i++) {
-            int offset = arrSize * i;
-            int streamedArrSize = i < nStreams - 1 ? arrSize : n - offset;
+            int streamedArrSize = n / nStreams + (i < r);
             CHECK(cudaMemcpyAsync(d_in1 + offset, in1 + offset, streamedArrSize * sizeof(int), cudaMemcpyHostToDevice, streams[i]));
             CHECK(cudaMemcpyAsync(d_in2 + offset, in2 + offset, streamedArrSize * sizeof(int), cudaMemcpyHostToDevice, streams[i]));
             dim3 gridSize((streamedArrSize - 1) / blockSize.x + 1);
             addVecKernel<<<gridSize, blockSize, 0, streams[i]>>>(d_in1 + offset, d_in2 + offset, streamedArrSize, d_out + offset);
             CHECK(cudaMemcpyAsync(out + offset, d_out + offset, streamedArrSize * sizeof(int), cudaMemcpyDeviceToHost, streams[i]));
+            offset += streamedArrSize;
         }
 
         timer.Stop();
