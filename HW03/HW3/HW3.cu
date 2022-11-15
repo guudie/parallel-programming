@@ -208,7 +208,67 @@ __global__ void blurImgKernel3(uchar3 * inPixels, int width, int height,
         uchar3 * outPixels)
 {
 	// TODO
+	extern __shared__ uchar3 s_inPixels[];
+	int r = blockIdx.y * blockDim.y + threadIdx.y;
+	int c = blockIdx.x * blockDim.x + threadIdx.x;
+	int dimXWithFilter = blockDim.x + filterWidth - 1;
+	int halfFltWidth = filterWidth >> 1;
+	s_inPixels[(threadIdx.y + halfFltWidth) * dimXWithFilter + threadIdx.x + halfFltWidth] = inPixels[r * width + c];
+	if(threadIdx.y < halfFltWidth) {
+		// top apron
+		int rt = r - halfFltWidth;
+		rt = rt < 0 ? 0 : rt;
+		s_inPixels[threadIdx.y * dimXWithFilter + threadIdx.x + halfFltWidth] = inPixels[rt * width + c];
 
+		// bottom apron
+		int rb = (blockIdx.y + 1) * blockDim.y + threadIdx.y;
+		rb = rb >= height ? height - 1 : rb;
+		s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + threadIdx.x + halfFltWidth] = inPixels[rb * width + c];
+
+		// left apron
+		int cl = blockIdx.x * blockDim.x - halfFltWidth + threadIdx.y;
+		cl = cl < 0 ? 0 : cl;
+		int tmpR = blockIdx.y * blockDim.y + threadIdx.x;
+		tmpR = tmpR >= height ? height - 1 : tmpR;
+		s_inPixels[(threadIdx.x + halfFltWidth) * dimXWithFilter + threadIdx.y] = inPixels[tmpR * width + cl];
+
+		// right apron
+		int cr = (blockIdx.x + 1) * blockDim.x + threadIdx.y;
+		cr = cr >= width ? width - 1 : cr;
+		s_inPixels[(threadIdx.x + halfFltWidth) * dimXWithFilter + blockDim.x + halfFltWidth + threadIdx.y] = inPixels[tmpR * width + cr];
+
+		// diagonals
+		if(threadIdx.x < halfFltWidth) {
+			// lefts
+			cl = c - halfFltWidth;
+			cl = cl < 0 ? 0 : cl;
+			s_inPixels[threadIdx.y * dimXWithFilter + threadIdx.x] = inPixels[rt * width + cl];
+			s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + threadIdx.x] = inPixels[rb * width + cl];
+			
+			// rights
+			cr = c + blockDim.x;
+			cr = cr >= width ? width - 1 : cr;
+			s_inPixels[threadIdx.y * dimXWithFilter + blockDim.x + halfFltWidth + threadIdx.x] = inPixels[rt * width + cr];
+			s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + halfFltWidth + blockDim.x + threadIdx.x] = inPixels[rb * width + cr];
+		}
+	}
+	__syncthreads();
+
+	if(r < height && c < width) {
+		float3 o = make_float3(0, 0, 0);
+		for(int f_r = 0; f_r < filterWidth; f_r++) {
+			for(int f_c = 0; f_c < filterWidth; f_c++) {
+				float filterVal = dc_filter[f_r * filterWidth + f_c];
+				int ri = threadIdx.y + f_r;
+				int ci = threadIdx.x + f_c;
+				uchar3 p = s_inPixels[ri * dimXWithFilter + ci];
+				o.x += p.x * filterVal;
+				o.y += p.y * filterVal;
+				o.z += p.z * filterVal;
+			}
+		}
+		outPixels[r * width + c] = make_uchar3(o.x, o.y, o.z);
+	}
 }							
 
 void blurImg(uchar3 * inPixels, int width, int height, float * filter, int filterWidth, 
@@ -267,7 +327,7 @@ void blurImg(uchar3 * inPixels, int width, int height, float * filter, int filte
 		else
 		{
 			// TODO: copy data from "filter" (on host) to "dc_filter" (on CMEM of device)
-
+			CHECK(cudaMemcpyToSymbol(dc_filter, filter, filterWidth * filterWidth * sizeof(float)));
 		}
 
 		// Call kernel
@@ -288,7 +348,8 @@ void blurImg(uchar3 * inPixels, int width, int height, float * filter, int filte
 		else
 		{
 			// TODO: call blurImgKernel3
-
+			int sharedSize = (blockSize.x + filterWidth - 1) * (blockSize.y + filterWidth - 1) * sizeof(uchar3);
+			blurImgKernel3<<<gridSize, blockSize, sharedSize>>>(d_inPixels, width, height, filterWidth, d_outPixels);
 		}
 		timer.Stop();
 		float time = timer.Elapsed();
