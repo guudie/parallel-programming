@@ -159,32 +159,17 @@ __global__ void blurImgKernel2(uchar3 * inPixels, int width, int height,
 		rb = rb >= height ? height - 1 : rb;
 		s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + threadIdx.x + halfFltWidth] = inPixels[rb * width + t_c];
 
-		// left apron
+		// left & right aprons
 		int cl = blockIdx.x * blockDim.x - halfFltWidth + threadIdx.y;
-		cl = cl < 0 ? 0 : cl;
-		int tmpR = blockIdx.y * blockDim.y + threadIdx.x;
-		tmpR = tmpR >= height ? height - 1 : tmpR;
-		s_inPixels[(threadIdx.x + halfFltWidth) * dimXWithFilter + threadIdx.y] = inPixels[tmpR * width + cl];
-
-		// right apron
 		int cr = (blockIdx.x + 1) * blockDim.x + threadIdx.y;
 		cr = cr >= width ? width - 1 : cr;
-		s_inPixels[(threadIdx.x + halfFltWidth) * dimXWithFilter + blockDim.x + halfFltWidth + threadIdx.y] = inPixels[tmpR * width + cr];
-
-		// diagonals
-		if(threadIdx.x < halfFltWidth) {
-			// lefts
-			cl = c - halfFltWidth;
-			cl = cl < 0 ? 0 : cl;
-			s_inPixels[threadIdx.y * dimXWithFilter + threadIdx.x] = inPixels[rt * width + cl];
-			s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + threadIdx.x] = inPixels[rb * width + cl];
-			
-			// rights
-			cr = c + blockDim.x;
-			cr = cr >= width ? width - 1 : cr;
-			s_inPixels[threadIdx.y * dimXWithFilter + blockDim.x + halfFltWidth + threadIdx.x] = inPixels[rt * width + cr];
-			s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + halfFltWidth + blockDim.x + threadIdx.x] = inPixels[rb * width + cr];
-		}
+		cl = cl < 0 ? 0 : cl;
+        for(int idx = threadIdx.x; idx < blockDim.y + filterWidth - 1; idx += blockDim.x) {
+            int tmpR = blockIdx.y * blockDim.y + idx - halfFltWidth;
+            tmpR = tmpR < 0 ? 0 : tmpR >= height ? height - 1 : tmpR;
+		    s_inPixels[idx * dimXWithFilter + threadIdx.y] = inPixels[tmpR * width + cl];
+		    s_inPixels[idx * dimXWithFilter + blockDim.x + halfFltWidth + threadIdx.y] = inPixels[tmpR * width + cr];
+        }
 	}
 	__syncthreads();
 
@@ -229,32 +214,17 @@ __global__ void blurImgKernel3(uchar3 * inPixels, int width, int height,
 		rb = rb >= height ? height - 1 : rb;
 		s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + threadIdx.x + halfFltWidth] = inPixels[rb * width + t_c];
 
-		// left apron
+		// left & right aprons
 		int cl = blockIdx.x * blockDim.x - halfFltWidth + threadIdx.y;
-		cl = cl < 0 ? 0 : cl;
-		int tmpR = blockIdx.y * blockDim.y + threadIdx.x;
-		tmpR = tmpR >= height ? height - 1 : tmpR;
-		s_inPixels[(threadIdx.x + halfFltWidth) * dimXWithFilter + threadIdx.y] = inPixels[tmpR * width + cl];
-
-		// right apron
 		int cr = (blockIdx.x + 1) * blockDim.x + threadIdx.y;
 		cr = cr >= width ? width - 1 : cr;
-		s_inPixels[(threadIdx.x + halfFltWidth) * dimXWithFilter + blockDim.x + halfFltWidth + threadIdx.y] = inPixels[tmpR * width + cr];
-
-		// diagonals
-		if(threadIdx.x < halfFltWidth) {
-			// lefts
-			cl = c - halfFltWidth;
-			cl = cl < 0 ? 0 : cl;
-			s_inPixels[threadIdx.y * dimXWithFilter + threadIdx.x] = inPixels[rt * width + cl];
-			s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + threadIdx.x] = inPixels[rb * width + cl];
-			
-			// rights
-			cr = c + blockDim.x;
-			cr = cr >= width ? width - 1 : cr;
-			s_inPixels[threadIdx.y * dimXWithFilter + blockDim.x + halfFltWidth + threadIdx.x] = inPixels[rt * width + cr];
-			s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + halfFltWidth + blockDim.x + threadIdx.x] = inPixels[rb * width + cr];
-		}
+		cl = cl < 0 ? 0 : cl;
+        for(int idx = threadIdx.x; idx < blockDim.y + filterWidth - 1; idx += blockDim.x) {
+            int tmpR = blockIdx.y * blockDim.y + idx - halfFltWidth;
+            tmpR = tmpR < 0 ? 0 : tmpR >= height ? height - 1 : tmpR;
+		    s_inPixels[idx * dimXWithFilter + threadIdx.y] = inPixels[tmpR * width + cl];
+		    s_inPixels[idx * dimXWithFilter + blockDim.x + halfFltWidth + threadIdx.y] = inPixels[tmpR * width + cr];
+        }
 	}
 	__syncthreads();
 
