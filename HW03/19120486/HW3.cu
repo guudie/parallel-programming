@@ -301,7 +301,7 @@ void blurImg(uchar3 * inPixels, int width, int height, float * filter, int filte
 		else
 		{
 			// TODO: copy data from "filter" (on host) to "dc_filter" (on CMEM of device)
-			CHECK(cudaMemcpyToSymbol(dc_filter, filter, filterWidth * filterWidth * sizeof(float)));
+			CHECK(cudaMemcpyToSymbol(dc_filter, filter, filterSize));
 		}
 
 		// Call kernel
