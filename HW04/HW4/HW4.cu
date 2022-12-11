@@ -127,10 +127,9 @@ __global__ void scanKernel(uint32_t * in, int n, uint32_t * out, volatile uint32
     // copy to shared memory
     int i1 = bi * blockDim.x * 2 + threadIdx.x;
     int i2 = i1 + blockDim.x;
-    if(threadIdx.x > 0) {
+    if(threadIdx.x > 0)
         s_data[threadIdx.x] = i1 - 1 < n ? in[i1 - 1] : 0;
-        s_data[threadIdx.x + blockDim.x] = i2 - 1 < n ? in[i2 - 1] : 0;
-    }
+    s_data[threadIdx.x + blockDim.x] = i2 - 1 < n ? in[i2 - 1] : 0;
     __syncthreads();
 
     // reduction
@@ -142,7 +141,7 @@ __global__ void scanKernel(uint32_t * in, int n, uint32_t * out, volatile uint32
     }
     // post-reduction
     for(int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        int i = (threadIdx.x + 1) * stride * 2 - 1 - stride;
+        int i = (threadIdx.x + 1) * stride * 2 - 1 + stride;
         if(i < 2 * blockDim.x)
             s_data[i] += s_data[i - stride];
         __syncthreads();
@@ -151,7 +150,7 @@ __global__ void scanKernel(uint32_t * in, int n, uint32_t * out, volatile uint32
     // write sum of block to bSums
     if(threadIdx.x == 0) {
         int endIdx = (bi + 1) * blockDim.x * 2 - 1;
-        bSums[bi] = s_data[2 * blockDim.x - 1] + endIdx < n ? in[endIdx] : 0;
+        bSums[bi] = s_data[2 * blockDim.x - 1] + (endIdx < n ? in[endIdx] : 0);
         
         if(bi > 0) {
             while(bCount1 < bi);
@@ -203,7 +202,7 @@ void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
     // TODO
     uint32_t *d_in, *d_out, *bits, *nOnesBefore;
     volatile uint32_t *bSums;
-
+    
     int gridSize = (n - 1) / blockSize + 1;
     int gridSizeScan = (n - 1) / blockSize / 2 + 1;
 
@@ -211,8 +210,8 @@ void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
     CHECK(cudaMalloc(&d_in, tmp));
     CHECK(cudaMalloc(&d_out, tmp));
     CHECK(cudaMalloc(&bits, tmp));
-    CHECK(cudaMalloc(&bSums, tmp));
-    CHECK(cudaMalloc(&nOnesBefore, gridSizeScan * sizeof(uint32_t)));
+    CHECK(cudaMalloc(&nOnesBefore, tmp));
+    CHECK(cudaMalloc(&bSums, gridSizeScan * sizeof(uint32_t)));
 
     CHECK(cudaMemcpy(d_in, in, tmp, cudaMemcpyHostToDevice));
 
@@ -223,7 +222,7 @@ void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
         maskBitKernel<<<gridSize, blockSize>>>(d_in, n, bits, d);
         scanKernel<<<gridSizeScan, blockSize, 2 * blockSize * sizeof(uint32_t)>>>(bits, n, nOnesBefore, bSums);
         reorderKernel<<<gridSize, blockSize>>>(d_in, bits, n, d_out, nOnesBefore);
-        cudaDeviceSynchronize();
+        CHECK(cudaDeviceSynchronize());
         CHECK(cudaGetLastError());
         swapPtr(d_in, d_out);
     }
