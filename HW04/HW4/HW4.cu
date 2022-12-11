@@ -216,7 +216,7 @@ void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
     CHECK(cudaMemcpy(d_in, in, tmp, cudaMemcpyHostToDevice));
 
     int initVal = 0;
-    for(int d = 0; d < 25; d++) {
+    for(int d = 0; d < 32; d++) {
         CHECK(cudaMemcpyToSymbol(bCount, &initVal, sizeof(int)));
         CHECK(cudaMemcpyToSymbol(bCount1, &initVal, sizeof(int)));
         maskBitKernel<<<gridSize, blockSize>>>(d_in, n, bits, d);
