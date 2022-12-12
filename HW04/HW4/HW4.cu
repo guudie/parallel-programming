@@ -114,7 +114,7 @@ __global__ void maskBitKernel(uint32_t * in, int n, uint32_t * bits, int d)
         bits[i] = (in[i] >> d) & 1;
 }
 
-__global__ void scanKernel(uint32_t * in, int n, uint32_t * out, volatile uint32_t * bSums)
+__global__ void scanKernel(uint32_t * bits, int n, uint32_t * nOnesBefore, volatile uint32_t * bSums)
 {
     extern __shared__ uint32_t s_data[];
     __shared__ int bi;
@@ -128,8 +128,8 @@ __global__ void scanKernel(uint32_t * in, int n, uint32_t * out, volatile uint32
     int i1 = bi * blockDim.x * 2 + threadIdx.x;
     int i2 = i1 + blockDim.x;
     if(threadIdx.x > 0)
-        s_data[threadIdx.x] = i1 <= n ? in[i1 - 1] : 0;
-    s_data[threadIdx.x + blockDim.x] = i2 <= n ? in[i2 - 1] : 0;
+        s_data[threadIdx.x] = i1 <= n ? bits[i1 - 1] : 0;
+    s_data[threadIdx.x + blockDim.x] = i2 <= n ? bits[i2 - 1] : 0;
     __syncthreads();
 
     // reduction
@@ -151,7 +151,7 @@ __global__ void scanKernel(uint32_t * in, int n, uint32_t * out, volatile uint32
     // write sum of block to bSums
     if(threadIdx.x == 0) {
         int endIdx = (bi + 1) * blockDim.x * 2 - 1;
-        bSums[bi] = s_data[2 * blockDim.x - 1] + (endIdx < n ? in[endIdx] : 0);
+        bSums[bi] = s_data[2 * blockDim.x - 1] + (endIdx < n ? bits[endIdx] : 0);
         
         if(bi > 0) {
             while(bCount1 < bi);
@@ -168,11 +168,11 @@ __global__ void scanKernel(uint32_t * in, int n, uint32_t * out, volatile uint32
         s_data[threadIdx.x + blockDim.x] += bSums[bi - 1];
     }
 
-    // write to out
+    // write to output
     if(i1 < n)
-        out[i1] = s_data[threadIdx.x];
+        nOnesBefore[i1] = s_data[threadIdx.x];
     if(i2 < n)
-        out[i2] = s_data[threadIdx.x + blockDim.x];
+        nOnesBefore[i2] = s_data[threadIdx.x + blockDim.x];
 }
 
 __global__ void reorderKernel(uint32_t * in, uint32_t * bits, int n, uint32_t * out, uint32_t * nOnesBefore)
