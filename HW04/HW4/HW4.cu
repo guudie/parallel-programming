@@ -128,19 +128,20 @@ __global__ void scanKernel(uint32_t * in, int n, uint32_t * out, volatile uint32
     int i1 = bi * blockDim.x * 2 + threadIdx.x;
     int i2 = i1 + blockDim.x;
     if(threadIdx.x > 0)
-        s_data[threadIdx.x] = i1 - 1 < n ? in[i1 - 1] : 0;
-    s_data[threadIdx.x + blockDim.x] = i2 - 1 < n ? in[i2 - 1] : 0;
+        s_data[threadIdx.x] = i1 <= n ? in[i1 - 1] : 0;
+    s_data[threadIdx.x + blockDim.x] = i2 <= n ? in[i2 - 1] : 0;
     __syncthreads();
 
     // reduction
-    for(int stride = 1; stride < 2 * blockDim.x; stride *= 2) {
+    int stride = 1;
+    for(; stride < 2 * blockDim.x; stride *= 2) {
         int i = (threadIdx.x + 1) * stride * 2 - 1;
         if(i < 2 * blockDim.x)
             s_data[i] += s_data[i - stride];
         __syncthreads();
     }
     // post-reduction
-    for(int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+    for(stride /= 4; stride > 0; stride /= 2) {
         int i = (threadIdx.x + 1) * stride * 2 - 1 + stride;
         if(i < 2 * blockDim.x)
             s_data[i] += s_data[i - stride];
