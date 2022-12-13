@@ -229,10 +229,11 @@ void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
     }
     CHECK(cudaMemcpy(out, d_in, tmp, cudaMemcpyDeviceToHost));
 
-    cudaFree(d_in);
-    cudaFree(d_out);
-    cudaFree(bits);
-    cudaFree(nOnesBefore);
+    CHECK(cudaFree(d_in));
+    CHECK(cudaFree(d_out));
+    CHECK(cudaFree(bits));
+    CHECK(cudaFree(nOnesBefore));
+    CHECK(cudaFree((void*)bSums));
 }
 
 // Radix Sort

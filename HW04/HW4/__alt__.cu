@@ -107,14 +107,7 @@ void sortByHost(const uint32_t * in, int n,
 __device__ int bCount = 0;
 volatile __device__ int bCount1 = 0;
 
-__global__ void maskBitKernel(uint32_t * in, int n, uint32_t * bits, int d)
-{
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if(i < n)
-        bits[i] = (in[i] >> d) & 1;
-}
-
-__global__ void scanKernel(uint32_t * bits, int n, uint32_t * nOnesBefore, volatile uint32_t * bSums)
+__global__ void scanKernel(uint32_t * in, int n, uint32_t * nOnesBefore, volatile uint32_t * bSums, int d)
 {
     extern __shared__ uint32_t s_data[];
     __shared__ int bi;
@@ -128,8 +121,8 @@ __global__ void scanKernel(uint32_t * bits, int n, uint32_t * nOnesBefore, volat
     int i1 = bi * blockDim.x * 2 + threadIdx.x;
     int i2 = i1 + blockDim.x;
     if(threadIdx.x > 0)
-        s_data[threadIdx.x] = i1 <= n ? bits[i1 - 1] : 0;
-    s_data[threadIdx.x + blockDim.x] = i2 <= n ? bits[i2 - 1] : 0;
+        s_data[threadIdx.x] = i1 <= n ? ((in[i1 - 1] >> d) & 1) : 0;
+    s_data[threadIdx.x + blockDim.x] = i2 <= n ? ((in[i2 - 1] >> d) & 1) : 0;
     __syncthreads();
 
     // reduction
@@ -151,7 +144,7 @@ __global__ void scanKernel(uint32_t * bits, int n, uint32_t * nOnesBefore, volat
     // write sum of block to bSums
     if(threadIdx.x == 0) {
         int endIdx = (bi + 1) * blockDim.x * 2 - 1;
-        bSums[bi] = s_data[2 * blockDim.x - 1] + (endIdx < n ? bits[endIdx] : 0);
+        bSums[bi] = s_data[2 * blockDim.x - 1] + (endIdx < n ? ((in[endIdx] >> d) & 1) : 0);
         
         if(bi > 0) {
             while(bCount1 < bi);
@@ -175,13 +168,13 @@ __global__ void scanKernel(uint32_t * bits, int n, uint32_t * nOnesBefore, volat
         nOnesBefore[i2] = s_data[threadIdx.x + blockDim.x];
 }
 
-__global__ void reorderKernel(uint32_t * in, uint32_t * bits, int n, uint32_t * out, uint32_t * nOnesBefore)
+__global__ void reorderKernel(uint32_t * in, int n, uint32_t * out, uint32_t * nOnesBefore, int d)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if(i < n) {
         int rank;
-        if(bits[i]) {
-            int nZeros = n - nOnesBefore[n-1] - bits[n-1];
+        if((in[i] >> d) & 1) {
+            int nZeros = n - nOnesBefore[n-1] - ((in[n-1] >> d) & 1);
             rank = nZeros + nOnesBefore[i];
         } else {
             rank = i - nOnesBefore[i];
@@ -201,7 +194,7 @@ void swapPtr(uint32_t *&a, uint32_t *&b)
 void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
 {
     // TODO
-    uint32_t *d_in, *d_out, *bits, *nOnesBefore;
+    uint32_t *d_in, *d_out, *nOnesBefore;
     volatile uint32_t *bSums;
     
     int gridSize = (n - 1) / blockSize + 1;
@@ -210,7 +203,6 @@ void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
     size_t tmp = n * sizeof(uint32_t);
     CHECK(cudaMalloc(&d_in, tmp));
     CHECK(cudaMalloc(&d_out, tmp));
-    CHECK(cudaMalloc(&bits, tmp));
     CHECK(cudaMalloc(&nOnesBefore, tmp));
     CHECK(cudaMalloc(&bSums, gridSizeScan * sizeof(uint32_t)));
 
@@ -220,19 +212,18 @@ void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
     for(int d = 0; d < 32; d++) {
         CHECK(cudaMemcpyToSymbol(bCount, &initVal, sizeof(int)));
         CHECK(cudaMemcpyToSymbol(bCount1, &initVal, sizeof(int)));
-        maskBitKernel<<<gridSize, blockSize>>>(d_in, n, bits, d);
-        scanKernel<<<gridSizeScan, blockSize, 2 * blockSize * sizeof(uint32_t)>>>(bits, n, nOnesBefore, bSums);
-        reorderKernel<<<gridSize, blockSize>>>(d_in, bits, n, d_out, nOnesBefore);
+        scanKernel<<<gridSizeScan, blockSize, 2 * blockSize * sizeof(uint32_t)>>>(d_in, n, nOnesBefore, bSums, d);
+        reorderKernel<<<gridSize, blockSize>>>(d_in, n, d_out, nOnesBefore, d);
         CHECK(cudaDeviceSynchronize());
         CHECK(cudaGetLastError());
         swapPtr(d_in, d_out);
     }
     CHECK(cudaMemcpy(out, d_in, tmp, cudaMemcpyDeviceToHost));
 
-    cudaFree(d_in);
-    cudaFree(d_out);
-    cudaFree(bits);
-    cudaFree(nOnesBefore);
+    CHECK(cudaFree(d_in));
+    CHECK(cudaFree(d_out));
+    CHECK(cudaFree(nOnesBefore));
+    CHECK(cudaFree((void*)bSums));
 }
 
 // Radix Sort
