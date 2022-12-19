@@ -1,0 +1,14 @@
+- trên cpu:
+    > tính độ quan trọng = edge detection convolution
+    > qhđ mảng 2 chiều
+    > tính giá trị seam nhỏ nhất hàng cuối
+    > truy vết
+    > cập nhật input
+- trên gpu:
+    + v1:
+        > tính độ quan trọng mỗi pixel = edge detection convolution (HW3)
+        > qhđ từng hàng trên gpu (1 block, dễ sync)
+        > tính gía trị seam nhỏ nhất và pixel cuối của nó = reduction trên hàng cuối cùng (gpu)
+        > truy vết (cpu)
+        > thread t cập nhật phần tử new(i, j) => new(i, j) = old(i, j) nếu j nằm trc pixel bị bỏ trên seam trên hàng i
+                                                           = old(i, j+1) nếu ngược lại
