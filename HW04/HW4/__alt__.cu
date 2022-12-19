@@ -111,17 +111,14 @@ __global__ void scanKernel(uint32_t * in, int n, uint32_t * nOnesBefore, volatil
 {
     extern __shared__ uint32_t s_data[];
     __shared__ int bi;
-    if(threadIdx.x == 0) {
+    if(threadIdx.x == 0)
         bi = atomicAdd(&bCount, 1);
-        s_data[0] = 0;
-    }
     __syncthreads();
 
     // copy to shared memory
     int i1 = bi * blockDim.x * 2 + threadIdx.x;
     int i2 = i1 + blockDim.x;
-    if(threadIdx.x > 0)
-        s_data[threadIdx.x] = i1 <= n ? ((in[i1 - 1] >> d) & 1) : 0;
+    s_data[threadIdx.x] = (i1 > 0 && i1 <= n) ? ((in[i1 - 1] >> d) & 1) : 0;
     s_data[threadIdx.x + blockDim.x] = i2 <= n ? ((in[i2 - 1] >> d) & 1) : 0;
     __syncthreads();
 
@@ -143,9 +140,7 @@ __global__ void scanKernel(uint32_t * in, int n, uint32_t * nOnesBefore, volatil
 
     // write sum of block to bSums
     if(threadIdx.x == 0) {
-        int endIdx = (bi + 1) * blockDim.x * 2 - 1;
-        bSums[bi] = s_data[2 * blockDim.x - 1] + (endIdx < n ? ((in[endIdx] >> d) & 1) : 0);
-        
+        bSums[bi] = s_data[2 * blockDim.x - 1];
         if(bi > 0) {
             while(bCount1 < bi);
             bSums[bi] += bSums[bi - 1];
