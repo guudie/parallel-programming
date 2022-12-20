@@ -118,20 +118,66 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     // loop while there are seams to carve
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
         // edge detection convolution
-        for(int r = 0; r < height; r++) {
-            for(int c = 0; c < curWidth; c++) {
-                int x = 0, y = 0;
-                for(int fri = 0; fri < 3; fri++) {
-                    for(int fci = 0; fci < 3; fci++) {
-                        int f_r = r - 3 / 2 + fri;
-                        int f_c = c - 3 / 2 + fci;
-                        uchar3 val = (f_r >= 0 && f_r < height && f_c >= 0 && f_c < curWidth) ? curIn[f_r * curWidth + f_c] : make_uchar3(0, 0, 0);
-                        x += (val.x + val.y + val.z) / 3 * xSobel[fri * 3 + fci];
-                        y += (val.x + val.y + val.z) / 3 * ySobel[fri * 3 + fci];
+        if(curWidth == width) {
+            for(int r = 0; r < height; r++) {
+                for(int c = 0; c < curWidth; c++) {
+                    int x = 0, y = 0;
+                    for(int fri = 0; fri < 3; fri++) {
+                        for(int fci = 0; fci < 3; fci++) {
+                            int f_r = r - 3 / 2 + fri;
+                            int f_c = c - 3 / 2 + fci;
+                            uchar3 val = (f_r >= 0 && f_r < height && f_c >= 0 && f_c < curWidth) ? curIn[f_r * curWidth + f_c] : make_uchar3(0, 0, 0);
+                            x += (val.x + val.y + val.z) / 3 * xSobel[fri * 3 + fci];
+                            y += (val.x + val.y + val.z) / 3 * ySobel[fri * 3 + fci];
+                        }
                     }
+                    energy[r * curWidth + c] = abs(x) + abs(y);
                 }
-                energy[r * curWidth + c] = abs(x) + abs(y);
             }
+        } else {
+            // 0: left, 1: right, 2: top, 3: bottom;
+            int* toUpdateIdx = (int*)malloc(sizeof(int) * 4);
+            for(int r = 0; r < height; r++) {
+                toUpdateIdx[0] = toUpdateIdx[1] = toUpdateIdx[2] = toUpdateIdx[3] = -1;
+                // update the two adjacent pixels of removed seam on row `r`: [r][trace[r] - 1] and [r][trace[r]]
+                if(trace[r] > 0)
+                    toUpdateIdx[0] = r * curWidth + trace[r] - 1;
+                if(trace[r] < curWidth)
+                    toUpdateIdx[1] = r * curWidth + trace[r];
+
+                // update the top & bottom diagonal pixels
+                if(r > 0 && trace[r-1] != trace[r]) {
+                    if(trace[r-1] > trace[r] && trace[r] > 0)
+                        toUpdateIdx[2] = (r - 1) * curWidth + trace[r] - 1;
+                    if(trace[r-1] < trace[r] && trace[r] < curWidth)
+                        toUpdateIdx[2] = (r - 1) * curWidth + trace[r];
+                }
+                if(r < height - 1 && trace[r+1] != trace[r]) {
+                    if(trace[r+1] > trace[r] && trace[r] > 0)
+                        toUpdateIdx[3] = (r + 1) * curWidth + trace[r] - 1;
+                    if(trace[r+1] < trace[r] && trace[r] < curWidth)
+                        toUpdateIdx[3] = (r + 1) * curWidth + trace[r];
+                }
+
+                for(int idx = 0; idx < 4; idx++) {
+                    if(toUpdateIdx[idx] == -1)
+                        continue;
+                    int rIdx = toUpdateIdx[idx] / curWidth;
+                    int cIdx = toUpdateIdx[idx] % curWidth;
+                    int x = 0, y = 0;
+                    for(int fri = 0; fri < 3; fri++) {
+                        for(int fci = 0; fci < 3; fci++) {
+                            int f_r = rIdx - 3 / 2 + fri;
+                            int f_c = cIdx - 3 / 2 + fci;
+                            uchar3 val = (f_r >= 0 && f_r < height && f_c >= 0 && f_c < curWidth) ? curIn[f_r * curWidth + f_c] : make_uchar3(0, 0, 0);
+                            x += (val.x + val.y + val.z) / 3 * xSobel[fri * 3 + fci];
+                            y += (val.x + val.y + val.z) / 3 * ySobel[fri * 3 + fci];
+                        }
+                    }
+                    energy[toUpdateIdx[idx]] = abs(x) + abs(y);
+                }
+            }
+            free(toUpdateIdx);
         }
 
         // calculate seams
@@ -174,6 +220,7 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         for(int r = 0; r < height; r++) {
             for(int c = 0; c < curWidth - 1; c++) {
                 curIn[r * (curWidth - 1) + c] = curIn[r * curWidth + c + (c >= trace[r])];
+                energy[r * (curWidth - 1) + c] = energy[r * curWidth + c + (c >= trace[r])];
             }
         }
     }
