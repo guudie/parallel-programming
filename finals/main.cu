@@ -105,7 +105,9 @@ void writePnm(uchar3 * pixels, int width, int height, char * fileName)
 	fclose(f);
 }
 
-void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth, int* xSobel, int* ySobel) {
+void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth,
+        int* xSobel, int* ySobel) 
+{
     uchar3* curIn = (uchar3*)malloc(sizeof(uchar3) * width * height);
     memcpy(curIn, inPixels, sizeof(uchar3) * width * height);
 
@@ -133,6 +135,9 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         }
 
         // calculate seams
+        for(int c = 0; c < curWidth; c++) {
+            dp[c] = energy[c];
+        }
         for(int r = 1; r < height; r++) {
             for(int c = 0; c < curWidth; c++) {
                 int i = r * curWidth + c;
@@ -188,7 +193,7 @@ void seamCarving(const uchar3* inPixels, uchar3* outPixels, int width, int heigh
     if(!useDevice) {
         seamCarvingCpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel);
     } else {
-        
+
     }
     timer.Stop();
 	float time = timer.Elapsed();
