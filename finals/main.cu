@@ -126,8 +126,8 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
                         int f_r = r - 3 / 2 + fri;
                         int f_c = c - 3 / 2 + fci;
                         uchar3 val = (f_r >= 0 && f_r < height && f_c >= 0 && f_c < curWidth) ? curIn[f_r * curWidth + f_c] : make_uchar3(0, 0, 0);
-                        x += (float)(val.x + val.y + val.z) / 3 * xSobel[fri * 3 + fci];
-                        y += (float)(val.x + val.y + val.z) / 3 * ySobel[fri * 3 + fci];
+                        x += (val.x + val.y + val.z) / 3 * xSobel[fri * 3 + fci];
+                        y += (val.x + val.y + val.z) / 3 * ySobel[fri * 3 + fci];
                     }
                 }
                 energy[r * curWidth + c] = abs(x) + abs(y);
@@ -254,5 +254,8 @@ int main(int argc, char** argv) {
     seamCarving(inPixels, correctOut, width, height, targetWidth, xSobel, ySobel, false);
 
     writePnm(correctOut, targetWidth, height, "out_host.pnm");
+
+    free(inPixels);
+    free(correctOut);
 }
 
