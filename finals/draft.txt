@@ -12,3 +12,23 @@
         > truy vết (cpu)
         > thread t cập nhật phần tử new(i, j) => new(i, j) = old(i, j) nếu j nằm trc pixel bị bỏ trên seam trên hàng i
                                                            = old(i, j+1) nếu ngược lại
+
+
+
+///////////////////////////////////////////////////////////////////
+
+40 SM
+1024 thread/SM
+
+> 1024 * 40 => vài block queue trong SM
+128 => 1024 / 128 (blocks/SM)
+8 * 40 = gridsize
+
+o o o | o o o | o o o | o o o o o o o o o o o o
+o o o | o o o | o o o
+
+for
+   wait_for_prev()
+   __syncthreads()
+   for threadIdx, active_threads + threadIdx, active_threads * 2 + threadIdx, ....
+	__syncthreads()
