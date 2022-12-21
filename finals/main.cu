@@ -285,38 +285,40 @@ __global__ void computeEnergyKernel(const uchar3* inPixels, int* energy, int wid
 }
 
 // called with 1 block
-__global__ void computeSeamsKernel(const int* energy, int* dp, int width, int height) {
+__global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int height) {
     extern __shared__ int s_rows[]; // stores 2 consecutive rows for faster memory access
     for(int c = threadIdx.x; c < width; c += blockDim.x) {
-        dp[c] = energy[c];
+        dp[c] = make_int2(energy[c], 0);
         s_rows[width + c] = energy[c];
     }
     __syncthreads();
     for(int r = 1; r < height; r++) {
         for(int c = threadIdx.x; c < width; c += blockDim.x) {
             int i = r * width + c;
-            int res = s_rows[(r & 1) * width + c];
+            int2 res = make_int2(s_rows[(r & 1) * width + c], c);
             if(c - 1 >= 0)
-                res = min(res, s_rows[(r & 1) * width + c - 1]);
+                if(res.x > s_rows[(r & 1) * width + c - 1])
+                    res = make_int2(s_rows[(r & 1) * width + c - 1], c - 1);
             if(c + 1 < width)
-                res = min(res, s_rows[(r & 1) * width + c + 1]);
-            res += energy[i];
+                if(res.x > s_rows[(r & 1) * width + c + 1])
+                    res = make_int2(s_rows[(r & 1) * width + c + 1], c + 1);
+            res.x += energy[i];
             dp[i] = res;
-            s_rows[(1 - (r & 1)) * width + c] = res;
+            s_rows[(1 - (r & 1)) * width + c] = res.x;
         }
         __syncthreads();
     }
 }
 
-__global__ void minReductionKernel(const int* dp_lastRow, int width, int* blockMin) {
+__global__ void minReductionKernel(const int2* dp_lastRow, int width, int2* blockMin) {
     extern __shared__ int2 s_data[];
     int c = blockIdx.x * blockDim.x * 2 + threadIdx.x;
     if(c < width) {
-        s_data[threadIdx.x].x = dp_lastRow[c];
+        s_data[threadIdx.x].x = dp_lastRow[c].x;
         s_data[threadIdx.x].y = c;
     }
     if(c + blockDim.x < width) {
-        s_data[threadIdx.x + blockDim.x].x = dp_lastRow[c + blockDim.x];
+        s_data[threadIdx.x + blockDim.x].x = dp_lastRow[c + blockDim.x].x;
         s_data[threadIdx.x + blockDim.x].y = c + blockDim.x;
     }
     __syncthreads();
@@ -329,11 +331,11 @@ __global__ void minReductionKernel(const int* dp_lastRow, int width, int* blockM
     }
 
     if(threadIdx.x == 0)
-        blockMin[blockIdx.x] = s_data[0].y;
+        blockMin[blockIdx.x] = s_data[0];
 }
 
 // inPixels1 contains pixel info for the current iteration, inPixels2 will be calculated to hold info for the next
-__global__ void removeSeamKernel(uchar3* inPixels1, uchar3* inPixels2, int* trace, int width, int height) {
+__global__ void carveSeamKernel(uchar3* inPixels1, uchar3* inPixels2, int* trace, int width, int height) {
     int r = blockIdx.y * blockDim.y + threadIdx.y;
     int c = blockIdx.x * blockDim.x + threadIdx.x;
     if(r < height && c < width - 1)
@@ -350,31 +352,90 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         int* xSobel, int* ySobel, dim3 blockSize=dim3(1))
 {
     // temp values, used for debugging
-    dim3 blockSizeEnergy(1024, 1024);
+    dim3 blockSizeEnergy(32, 32);
     dim3 blockSizeSeams(1024);
     dim3 blockSizeReduction(1024);
-    dim3 blockSizeCarve(1024, 1024);
+    dim3 blockSizeCarve(32, 32);
     ///////////////////////////////////////////
 
     uchar3 *d_inPixels1, *d_inPixels2;
-    int *d_energy, *d_dp, *d_trace, *d_blockMin;
-    int *blockMin;
+    int *d_energy, *d_trace;
+    int2 *d_dp, *d_blockMin;
+
+    int *trace;
+    int2 *dp, *blockMin;
 
     size_t inSize = sizeof(uchar3) * width * height;
     size_t arrSize = sizeof(int) * width * height;
 
-    dim3 gridSizeEnergy((width - 1) / blockSizeEnergy.x + 1, (height - 1) / blockSizeEnergy.y + 1);
-    dim3 gridSizeSeams(1);
-    dim3 gridSizeReduction((width - 1) / blockSizeReduction.x / 2 + 1);
-    dim3 gridSizeCarve((width - 1) / blockSizeCarve.x + 1, (height - 1) / blockSizeCarve.y + 1);
-
     CHECK(cudaMalloc(&d_inPixels1, inSize));
     CHECK(cudaMalloc(&d_inPixels2, inSize));
 
-    cudaMalloc(&d_energy, arrSize);
-    cudaMalloc(&d_dp, arrSize);
-    cudaMalloc(&d_trace, arrSize);
-    cudaMalloc(&d_blockMin, )
+    CHECK(cudaMalloc(&d_energy, arrSize));
+    CHECK(cudaMalloc(&d_trace, arrSize));
+    CHECK(cudaMalloc(&d_dp, sizeof(int2) * width * height));
+    CHECK(cudaMalloc(&d_blockMin, sizeof(int2) * ((width - 1) / blockSizeReduction.x / 2 + 1)));
+
+    dp = (int2*)malloc(sizeof(int2) * width * height);
+    trace = (int*)malloc(sizeof(int) * height);
+    blockMin = (int2*)malloc(sizeof(int2) * ((width - 1) / blockSizeReduction.x / 2 + 1));
+
+    CHECK(cudaMemcpy(d_inPixels1, inPixels, inSize, cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpyToSymbol(d_xSobel, xSobel, sizeof(int) * 9));
+    CHECK(cudaMemcpyToSymbol(d_ySobel, ySobel, sizeof(int) * 9));
+
+    for(int curWidth = width; curWidth > targetWidth; curWidth--) {
+        dim3 gridSizeEnergy((curWidth - 1) / blockSizeEnergy.x + 1, (height - 1) / blockSizeEnergy.y + 1);
+        dim3 gridSizeSeams(1);
+        dim3 gridSizeReduction((curWidth - 1) / blockSizeReduction.x / 2 + 1);
+        dim3 gridSizeCarve((curWidth - 1) / blockSizeCarve.x + 1, (height - 1) / blockSizeCarve.y + 1);
+
+        int smemEnergy = (blockSizeEnergy.x + 2) * (blockSizeEnergy.y + 2) * sizeof(uchar3);
+        int smemSeams = 2 * curWidth * sizeof(int);
+        int smemReduction = 2 * blockSizeReduction.x * sizeof(int2);
+
+        // compute energy
+        computeEnergyKernel<<<gridSizeEnergy, blockSizeEnergy, smemEnergy>>>(d_inPixels1, d_energy, curWidth, height);
+        // dynamic programming
+        computeSeamsKernel<<<gridSizeSeams, blockSizeSeams, smemSeams>>>(d_energy, d_dp, curWidth, height);
+        // reduction to find min
+        minReductionKernel<<<gridSizeReduction, blockSizeReduction, smemReduction>>>(d_dp + (height - 1) * curWidth, curWidth, d_blockMin);
+
+        CHECK(cudaMemcpy(blockMin, d_blockMin, sizeof(int2) * gridSizeReduction.x, cudaMemcpyDeviceToHost));
+        CHECK(cudaMemcpy(dp, d_dp, sizeof(int2) * curWidth * height, cudaMemcpyDeviceToHost));
+
+        int2 res = blockMin[0];
+        for(int i = 1; i < gridSizeReduction.x; i++)
+            if(res.x > blockMin[i].x)
+                res = blockMin[i];
+        trace[height - 1] = res.y;
+
+        // tracing
+        for(int r = height - 1; r > 0; r--) {
+            trace[r - 1] = dp[r * curWidth + trace[r]].y;
+        }
+
+        CHECK(cudaMemcpy(d_trace, trace, sizeof(int) * height, cudaMemcpyHostToDevice));
+        // remove seam
+        carveSeamKernel<<<gridSizeCarve, blockSizeCarve>>>(d_inPixels1, d_inPixels2, d_trace, curWidth, height);
+
+        cudaDeviceSynchronize();
+        CHECK(cudaGetLastError());
+
+        swapPtr(d_inPixels1, d_inPixels2);
+    }
+
+    CHECK(cudaMemcpy(outPixels, d_inPixels1, sizeof(uchar3) * targetWidth * height, cudaMemcpyDeviceToHost));
+
+    CHECK(cudaFree(d_inPixels1));
+    CHECK(cudaFree(d_inPixels2));
+    CHECK(cudaFree(d_energy));
+    CHECK(cudaFree(d_trace));
+    CHECK(cudaFree(d_dp));
+    CHECK(cudaFree(d_blockMin));
+    free(trace);
+    free(dp);
+    free(blockMin);
 }
 
 void seamCarving(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth,
@@ -385,7 +446,7 @@ void seamCarving(const uchar3* inPixels, uchar3* outPixels, int width, int heigh
     if(!useDevice) {
         seamCarvingCpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel);
     } else {
-
+        seamCarvingGpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel, blockSize);
     }
     timer.Stop();
 	float time = timer.Elapsed();
