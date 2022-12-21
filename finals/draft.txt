@@ -28,7 +28,7 @@ o o o | o o o | o o o | o o o o o o o o o o o o
 o o o | o o o | o o o
 
 for
-   wait_for_prev()
-   __syncthreads()
-   for threadIdx, active_threads + threadIdx, active_threads * 2 + threadIdx, ....
-	__syncthreads()
+    wait_for_prev()
+    __syncthreads()
+    for threadIdx, active_threads + threadIdx, active_threads * 2 + threadIdx, ....
+        __syncthreads()
