@@ -297,7 +297,7 @@ __global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int h
             int i = r * width + c;
             int2 res = make_int2(s_rows[(r & 1) * width + c], c);
             if(c - 1 >= 0)
-                if(res.x > s_rows[(r & 1) * width + c - 1])
+                if(res.x >= s_rows[(r & 1) * width + c - 1])
                     res = make_int2(s_rows[(r & 1) * width + c - 1], c - 1);
             if(c + 1 < width)
                 if(res.x > s_rows[(r & 1) * width + c + 1])
@@ -325,8 +325,8 @@ __global__ void minReductionKernel(const int2* dp_lastRow, int width, int2* bloc
 
     for(int stride = blockDim.x; stride > 0; stride /= 2) {
         if(threadIdx.x < stride)
-            if(c + stride < width && s_data[threadIdx.x].x > s_data[threadIdx.x + blockDim.x].x)
-                s_data[threadIdx.x] = s_data[threadIdx.x + blockDim.x];
+            if(c + stride < width && s_data[threadIdx.x].x > s_data[threadIdx.x + stride].x)
+                s_data[threadIdx.x] = s_data[threadIdx.x + stride];
         __syncthreads();
     }
 
@@ -409,6 +409,14 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
             if(res.x > blockMin[i].x)
                 res = blockMin[i];
         trace[height - 1] = res.y;
+        // int res = dp[(height - 1) * curWidth].x;
+        // trace[height - 1] = 0;
+        // for(int c = 0; c < curWidth; c++) {
+        //     if(res > dp[(height - 1) * curWidth + c].x) {
+        //         res = dp[(height - 1) * curWidth + c].x;
+        //         trace[height - 1] = c;
+        //     }
+        // }
 
         // tracing
         for(int r = height - 1; r > 0; r--) {
@@ -506,9 +514,14 @@ int main(int argc, char** argv) {
     uchar3* correctOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
     seamCarving(inPixels, correctOut, width, height, targetWidth, xSobel, ySobel, false);
 
+    uchar3* deviceOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
+    seamCarving(inPixels, deviceOut, width, height, targetWidth, xSobel, ySobel, dim3(1), true);
+
     writePnm(correctOut, targetWidth, height, "out_host.pnm");
+    writePnm(deviceOut, targetWidth, height, "out_device.pnm");
 
     free(inPixels);
     free(correctOut);
+    free(deviceOut);
 }
 
