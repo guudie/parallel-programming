@@ -241,15 +241,15 @@ __global__ void computeEnergyKernel(const uchar3* inPixels, int* energy, int wid
 	int c = blockIdx.x * blockDim.x + threadIdx.x;
 	int dimXWithFilter = blockDim.x + 2;
     uchar3 zero_uchar3 = {0, 0, 0};
-	s_inPixels[(threadIdx.y + 1) * dimXWithFilter + threadIdx.x + 1] = (0 <= r && r < height && 0 <= c && c < width) ? inPixels[r * width + c] : zero_uchar3;
+	s_inPixels[(threadIdx.y + 1) * dimXWithFilter + threadIdx.x + 1] = (r < height && c < width) ? inPixels[r * width + c] : zero_uchar3;
 	if(threadIdx.y < 1) {
 		// top apron
 		int rt = r - 1;
-		s_inPixels[threadIdx.y * dimXWithFilter + threadIdx.x + 1] = (rt >= 0 && 0 <= c && c < width) ? inPixels[rt * width + c] : zero_uchar3;
+		s_inPixels[threadIdx.y * dimXWithFilter + threadIdx.x + 1] = (rt >= 0 && c < width) ? inPixels[rt * width + c] : zero_uchar3;
 
 		// bottom apron
 		int rb = (blockIdx.y + 1) * blockDim.y + threadIdx.y;
-		s_inPixels[(threadIdx.y + blockDim.y + 1) * dimXWithFilter + threadIdx.x + 1] = (rb < height && 0 <= c && c < width) ? inPixels[rb * width + c] : zero_uchar3;
+		s_inPixels[(threadIdx.y + blockDim.y + 1) * dimXWithFilter + threadIdx.x + 1] = (rb < height && c < width) ? inPixels[rb * width + c] : zero_uchar3;
 
 		// left & right aprons
 		int cl = blockIdx.x * blockDim.x - 1 + threadIdx.y;
