@@ -1,10 +1,21 @@
-ARC = -arch=sm_61
+.PHONY: all clean
 
 NVCC = nvcc
-GPP = g++
+ARC = -arch=sm_61
 
-seam-carving-device.o: seam-carving-device.h seam-carving-device.cu
-	$(NVCC) $(ARC) -c seam-carving-device.cu -o seam-carving-device.o
+all: sc-device.o sc-host.o main.o seam-carving
 
-seam-carving-host.o: seam-carving-host.h seam-carving-host.cpp
-	$(GPP) -O2 -c seam-carving-host.cpp -o seam-carving-host.o
+sc-device.o: device.cuh sc-device.cu
+	$(NVCC) $(ARC) -c sc-device.cu -o sc-device.o
+
+sc-host.o: host.cuh sc-host.cu
+	$(NVCC) $(ARC) -c sc-host.cu -o sc-host.o
+
+main.o: sc-device.o sc-host.o
+	$(NVCC) $(ARC) -c sc-device.o sc-host.o -o main.o
+
+seam-carving: main.o
+	$(NVCC) $(ARC) main.o -o seam-carving
+
+clean:
+	rm *.o *.exe

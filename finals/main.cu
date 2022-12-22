@@ -240,31 +240,24 @@ __global__ void computeEnergyKernel(const uchar3* inPixels, int* energy, int wid
     int r = blockIdx.y * blockDim.y + threadIdx.y;
 	int c = blockIdx.x * blockDim.x + threadIdx.x;
 	int dimXWithFilter = blockDim.x + 2;
-	int halfFltWidth = 3 >> 1;
-	int t_r = r >= height ? height - 1 : r;
-	int t_c = c >= width ? width - 1 : c;
-	s_inPixels[(threadIdx.y + halfFltWidth) * dimXWithFilter + threadIdx.x + halfFltWidth] = inPixels[t_r * width + t_c];
-	if(threadIdx.y < halfFltWidth) {
+    uchar3 zero_uchar3 = {0, 0, 0};
+	s_inPixels[(threadIdx.y + 1) * dimXWithFilter + threadIdx.x + 1] = (0 <= r && r < height && 0 <= c && c < width) ? inPixels[r * width + c] : zero_uchar3;
+	if(threadIdx.y < 1) {
 		// top apron
-		int rt = r - halfFltWidth;
-		rt = rt < 0 ? 0 : rt;
-		s_inPixels[threadIdx.y * dimXWithFilter + threadIdx.x + halfFltWidth] = inPixels[rt * width + t_c];
+		int rt = r - 1;
+		s_inPixels[threadIdx.y * dimXWithFilter + threadIdx.x + 1] = (rt >= 0 && 0 <= c && c < width) ? inPixels[rt * width + c] : zero_uchar3;
 
 		// bottom apron
 		int rb = (blockIdx.y + 1) * blockDim.y + threadIdx.y;
-		rb = rb >= height ? height - 1 : rb;
-		s_inPixels[(threadIdx.y + blockDim.y + halfFltWidth) * dimXWithFilter + threadIdx.x + halfFltWidth] = inPixels[rb * width + t_c];
+		s_inPixels[(threadIdx.y + blockDim.y + 1) * dimXWithFilter + threadIdx.x + 1] = (rb < height && 0 <= c && c < width) ? inPixels[rb * width + c] : zero_uchar3;
 
 		// left & right aprons
-		int cl = blockIdx.x * blockDim.x - halfFltWidth + threadIdx.y;
+		int cl = blockIdx.x * blockDim.x - 1 + threadIdx.y;
 		int cr = (blockIdx.x + 1) * blockDim.x + threadIdx.y;
-		cr = cr >= width ? width - 1 : cr;
-		cl = cl < 0 ? 0 : cl;
         for(int idx = threadIdx.x; idx < blockDim.y + 2; idx += blockDim.x) {
-            int tmpR = blockIdx.y * blockDim.y + idx - halfFltWidth;
-            tmpR = tmpR < 0 ? 0 : tmpR >= height ? height - 1 : tmpR;
-		    s_inPixels[idx * dimXWithFilter + threadIdx.y] = inPixels[tmpR * width + cl];
-		    s_inPixels[idx * dimXWithFilter + blockDim.x + halfFltWidth + threadIdx.y] = inPixels[tmpR * width + cr];
+            int tmpR = blockIdx.y * blockDim.y + idx - 1;
+		    s_inPixels[idx * dimXWithFilter + threadIdx.y] = (cl >= 0 && 0 <= tmpR && tmpR < height) ? inPixels[tmpR * width + cl] : zero_uchar3;
+		    s_inPixels[idx * dimXWithFilter + blockDim.x + 1 + threadIdx.y] = (cr < width && 0 <= tmpR && tmpR < height) ? inPixels[tmpR * width + cr] : zero_uchar3;
         }
 	}
 	__syncthreads();
@@ -284,7 +277,7 @@ __global__ void computeEnergyKernel(const uchar3* inPixels, int* energy, int wid
 	}
 }
 
-// called with 1 block
+// called with 1 flat block
 __global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int height) {
     extern __shared__ int s_rows[]; // stores 2 consecutive rows for faster memory access
     for(int c = threadIdx.x; c < width; c += blockDim.x) {
@@ -341,6 +334,22 @@ __global__ void carveSeamKernel(uchar3* inPixels1, uchar3* inPixels2, int* trace
     if(r < height && c < width - 1)
         inPixels2[r * (width - 1) + c] = inPixels1[r * width + c + (c >= trace[r])];
 }
+
+// unoptimized version of carveSeamKernel(), no ptr swapping trick, ran with 1 flat block
+// __global__ void carveSeamKernel_v0(uchar3* inPixels, int* trace, int width, int height) {
+//     for(int r = blockIdx.x; r < height; r += gridDim.x) {
+//         for(int offsetX = 0; offsetX < width - 1; offsetX += blockDim.x) { // using offset instead of column index to avoid synchronization issues
+//             int c = offsetX + threadIdx.x;
+//             uchar3 val;
+//             if(c < width - 1)
+//                 val = inPixels[r * width + c + (c >= trace[r])];
+//             __syncthreads();
+//             if(c < width - 1)
+//                 inPixels[r * (width - 1) + c] = val;
+//             __syncthreads();
+//         }
+//     }
+// }
 
 void swapPtr(uchar3*& a, uchar3*& b) {
     uchar3* tmp = a;
@@ -516,6 +525,8 @@ int main(int argc, char** argv) {
 
     uchar3* deviceOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
     seamCarving(inPixels, deviceOut, width, height, targetWidth, xSobel, ySobel, dim3(1), true);
+
+    printf("Error: %f", getErr(correctOut, deviceOut, targetWidth * height));
 
     writePnm(correctOut, targetWidth, height, "out_host.pnm");
     writePnm(deviceOut, targetWidth, height, "out_device.pnm");
