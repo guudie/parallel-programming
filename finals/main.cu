@@ -306,20 +306,20 @@ __global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int h
 __global__ void minReductionKernel(const int2* dp_lastRow, int width, int2* blockMin) {
     extern __shared__ int2 s_data[];
     int c = blockIdx.x * blockDim.x * 2 + threadIdx.x;
-    if(c < width) {
-        s_data[threadIdx.x].x = dp_lastRow[c].x;
-        s_data[threadIdx.x].y = c;
-    }
-    if(c + blockDim.x < width) {
-        s_data[threadIdx.x + blockDim.x].x = dp_lastRow[c + blockDim.x].x;
-        s_data[threadIdx.x + blockDim.x].y = c + blockDim.x;
-    }
+    if(c < width)
+        s_data[threadIdx.x] = make_int2(dp_lastRow[c].x, c);
+    if(c + blockDim.x < width)
+        s_data[threadIdx.x + blockDim.x] = make_int2(dp_lastRow[c + blockDim.x].x, c + blockDim.x);
     __syncthreads();
 
     for(int stride = blockDim.x; stride > 0; stride /= 2) {
-        if(threadIdx.x < stride)
-            if(c + stride < width && s_data[threadIdx.x].x > s_data[threadIdx.x + stride].x)
-                s_data[threadIdx.x] = s_data[threadIdx.x + stride];
+        if(threadIdx.x < stride) {
+            int2& a = s_data[threadIdx.x];
+            int2 b = s_data[threadIdx.x + stride];
+            if(c + stride < width)
+                if(a.x > b.x || (a.x == b.x && a.y > b.y))
+                    a = b;
+        }
         __syncthreads();
     }
 
