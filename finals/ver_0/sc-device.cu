@@ -81,9 +81,8 @@ __global__ void minReductionKernel(const int2* dp_lastRow, int width, int2* bloc
         if(threadIdx.x < stride) {
             int2& a = s_data[threadIdx.x];
             int2 b = s_data[threadIdx.x + stride];
-            if(c + stride < width)
-                if(a.x > b.x || (a.x == b.x && a.y > b.y))
-                    a = b;
+            if(c + stride < width && (a.x > b.x || (a.x == b.x && a.y > b.y)))
+                a = b;
         }
         __syncthreads();
     }
@@ -117,7 +116,7 @@ __global__ void carveSeamKernel(uchar3* inPixels1, uchar3* inPixels2, int* trace
 // }
 
 void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth,
-        int* xSobel, int* ySobel, dim3 blockSize=dim3(1))
+        int* xSobel, int* ySobel, dim3 blockSize1D, dim3 blockSize2D)
 {
     // temp values, used for debugging
     dim3 blockSizeEnergy(32, 32);

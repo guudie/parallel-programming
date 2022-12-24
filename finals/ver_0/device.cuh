@@ -12,6 +12,6 @@ __global__ void minReductionKernel(const int2* dp_lastRow, int width, int2* bloc
 __global__ void carveSeamKernel(uchar3* inPixels1, uchar3* inPixels2, int* trace, int width, int height);
 // __global__ void carveSeamKernel_v0(uchar3* inPixels, int* trace, int width, int height);
 void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth,
-                    int* xSobel, int* ySobel, dim3 blockSize);
+                    int* xSobel, int* ySobel, dim3 blockSize1D=dim3(1024), dim3 blockSize2D=dim3(32, 32));
 
 #endif

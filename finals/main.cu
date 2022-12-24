@@ -3,14 +3,14 @@
 #include "device.cuh"
 
 void seamCarving(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth,
-        int* xSobel, int* ySobel, dim3 blockSize=dim3(1), bool useDevice=false) 
+        int* xSobel, int* ySobel, dim3 blockSize1D=dim3(1024), dim3 blockSize2D=dim3(32, 32), bool useDevice=false) 
 {
     GpuTimer timer;
 	timer.Start();
     if(!useDevice) {
         seamCarvingCpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel);
     } else {
-        seamCarvingGpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel, blockSize);
+        seamCarvingGpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel, blockSize1D, blockSize2D);
     }
     timer.Stop();
 	float time = timer.Elapsed();
@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
     seamCarving(inPixels, correctOut, width, height, targetWidth, xSobel, ySobel, false);
 
     uchar3* deviceOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
-    seamCarving(inPixels, deviceOut, width, height, targetWidth, xSobel, ySobel, dim3(1), true);
+    seamCarving(inPixels, deviceOut, width, height, targetWidth, xSobel, ySobel, dim3(1024), dim3(32, 32), true);
 
     printf("Error: %f", getErr(correctOut, deviceOut, targetWidth * height));
 
