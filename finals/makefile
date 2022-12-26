@@ -7,7 +7,7 @@ ARC = -arch=sm_$(CC)
 CUDAARGS = -Xptxas -O3,-v -Xcompiler -O2
 RUNARGS :=
 
-GARBAGE := *.o *.obj *.exe *.exp *.lib
+GARBAGE := *.o *.exe *.exp *.lib
 GARBAGE_SUBDIR := $(foreach PAT,$(GARBAGE),$(addprefix ./*/,$(PAT)))
 
 all: utils.o ./ver_$(VER)/sc-device_v$(VER).o sc-host.o main_v$(VER).o seam-carving_v$(VER)
