@@ -43,8 +43,10 @@ int main(int argc, char** argv) {
     uchar3* correctOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
     seamCarving(inPixels, correctOut, width, height, targetWidth, xSobel, ySobel, false);
 
+    dim3 blockSize1D(1024);
+    dim3 blockSize2D(32, 32);
     uchar3* deviceOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
-    seamCarving(inPixels, deviceOut, width, height, targetWidth, xSobel, ySobel, dim3(1024), dim3(32, 32), true);
+    seamCarving(inPixels, deviceOut, width, height, targetWidth, xSobel, ySobel, blockSize1D, blockSize2D, true);
 
     printf("Error: %f", getErr(correctOut, deviceOut, targetWidth * height));
 

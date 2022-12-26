@@ -1,6 +1,6 @@
 .PHONY: all run clean
 
-VER = 0
+VER = 1
 CC = 61
 NVCC = nvcc
 ARC = -arch=sm_$(CC)

@@ -99,30 +99,14 @@ __global__ void carveSeamKernel(uchar3* inPixels1, uchar3* inPixels2, int* trace
         inPixels2[r * (width - 1) + c] = inPixels1[r * width + c + (c >= trace[r])];
 }
 
-// unoptimized version of carveSeamKernel(), no ptr swapping trick, ran with 1 flat block
-// __global__ void carveSeamKernel_v0(uchar3* inPixels, int* trace, int width, int height) {
-//     for(int r = blockIdx.x; r < height; r += gridDim.x) {
-//         for(int offsetX = 0; offsetX < width - 1; offsetX += blockDim.x) { // using offset instead of column index to avoid synchronization issues
-//             int c = offsetX + threadIdx.x;
-//             uchar3 val;
-//             if(c < width - 1)
-//                 val = inPixels[r * width + c + (c >= trace[r])];
-//             __syncthreads();
-//             if(c < width - 1)
-//                 inPixels[r * (width - 1) + c] = val;
-//             __syncthreads();
-//         }
-//     }
-// }
-
 void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth,
         int* xSobel, int* ySobel, dim3 blockSize1D, dim3 blockSize2D)
 {
     // temp values, used for debugging
-    dim3 blockSizeEnergy(32, 32);
-    dim3 blockSizeSeams(1024);
-    dim3 blockSizeReduction(1024);
-    dim3 blockSizeCarve(32, 32);
+    dim3 blockSizeEnergy = blockSize2D;
+    dim3 blockSizeSeams = blockSize1D;
+    dim3 blockSizeReduction = blockSize1D;
+    dim3 blockSizeCarve = blockSize2D;
     ///////////////////////////////////////////
 
     uchar3 *d_inPixels1, *d_inPixels2;
