@@ -42,29 +42,62 @@ __global__ void computeEnergyKernel(const uchar3* inPixels, int* energy, int wid
 	}
 }
 
-// called with 1 flat block
-__global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int height) {
-    extern __shared__ int s_rows[]; // stores 2 consecutive rows for faster memory access
-    for(int c = threadIdx.x; c < width; c += blockDim.x) {
-        dp[c] = make_int2(energy[c], 0);
-        s_rows[width + c] = energy[c];
-    }
-    __syncthreads();
-    for(int r = 1; r < height; r++) {
-        for(int c = threadIdx.x; c < width; c += blockDim.x) {
-            int i = r * width + c;
-            int2 res = make_int2(s_rows[(r & 1) * width + c], c);
-            if(c - 1 >= 0)
-                if(res.x >= s_rows[(r & 1) * width + c - 1])
-                    res = make_int2(s_rows[(r & 1) * width + c - 1], c - 1);
-            if(c + 1 < width)
-                if(res.x > s_rows[(r & 1) * width + c + 1])
-                    res = make_int2(s_rows[(r & 1) * width + c + 1], c + 1);
-            res.x += energy[i];
-            dp[i] = res;
-            s_rows[(1 - (r & 1)) * width + c] = res.x;
+// get max number of active blocks at once: ⌊max_threads_per_sm / block_size⌋ * max_num_sm
+// bFlag size: `height` rows x `(width - 1) / blockSize + 1` cols
+__global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int height, volatile bool* bFlag, bool prevFlagVal) {
+    int bFlagWidth = (width - 1) / blockDim.x + 1;
+    // extern __shared__ int s_rows[]; // stores 2 consecutive rows for faster memory access (now with 2 additional elements at the ends)
+    for(int offsetX = blockIdx.x * blockDim.x; offsetX < width; offsetX += gridDim.x * blockDim.x) {
+        int c = offsetX + threadIdx.x;
+        if(c < width) {
+            dp[c] = make_int2(energy[c], 0);
+            // s_rows[width + c] = energy[c];
         }
         __syncthreads();
+        if(threadIdx.x == 0) {
+            bFlag[offsetX / blockDim.x] = !prevFlagVal;
+            // __threadfence();
+        }
+        // come back later
+        // __syncthreads();
+    }
+    
+    for(int r = 1; r < height; r++) {
+        for(int offsetX = blockIdx.x * blockDim.x; offsetX < width; offsetX += gridDim.x * blockDim.x) {
+            int bFlagCol = offsetX / blockDim.x;
+            if(threadIdx.x == 0) {
+                // wait for the two blocks (segments to be completed)
+                while(1) {
+                    bool prevBlkFlag = bFlagCol > 0 ? bFlag[(r - 1) * bFlagWidth + bFlagCol - 1] : !prevFlagVal;
+                    bool nextBlkFlag = bFlagCol < bFlagWidth - 1 ? bFlag[(r - 1) * bFlagWidth + bFlagCol + 1] : !prevFlagVal;
+                    if(prevBlkFlag != prevFlagVal && nextBlkFlag != prevFlagVal)
+                        break;
+                }
+            }
+            __syncthreads();
+
+            int c = offsetX + threadIdx.x;
+            if(c < width) {
+                int i = r * width + c;
+                int2 res = make_int2(dp[(r - 1) * width + c].x, c);
+                if(c - 1 >= 0)
+                    if(res.x >= dp[(r - 1) * width + c - 1].x)
+                        res = make_int2(dp[(r - 1) * width + c - 1].x, c - 1);
+                if(c + 1 < width)
+                    if(res.x > dp[(r - 1) * width + c + 1].x)
+                        res = make_int2(dp[(r - 1) * width + c + 1].x, c + 1);
+                res.x += energy[i];
+                dp[i] = res;
+                // s_rows[(1 - (r & 1)) * width + c] = res.x;
+            }
+            __syncthreads();
+            if(threadIdx.x == 0) {
+                bFlag[r * bFlagWidth + offsetX / blockDim.x] = !prevFlagVal;
+                // __threadfence();
+            }
+            // __syncthreads();
+        }
+        // __syncthreads();
     }
 }
 
@@ -111,6 +144,7 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     uchar3 *d_inPixels1, *d_inPixels2;
     int *d_energy, *d_trace;
     int2 *d_dp, *d_blockMin;
+    volatile bool *d_bFlag;
 
     int *trace;
     int2 *dp, *blockMin;
@@ -125,6 +159,9 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     CHECK(cudaMalloc(&d_trace, arrSize));
     CHECK(cudaMalloc(&d_dp, sizeof(int2) * width * height));
     CHECK(cudaMalloc(&d_blockMin, sizeof(int2) * ((width - 1) / blockSizeReduction.x / 2 + 1)));
+    CHECK(cudaMalloc(&d_bFlag, sizeof(bool) * ((width - 1) / blockSizeSeams.x + 1) * height));
+    
+    CHECK(cudaMemset((void *)d_bFlag, 0, sizeof(bool) * ((width - 1) / blockSizeSeams.x + 1) * height));
 
     dp = (int2*)malloc(sizeof(int2) * width * height);
     trace = (int*)malloc(sizeof(int) * height);
@@ -136,7 +173,7 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
 
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
         dim3 gridSizeEnergy((curWidth - 1) / blockSizeEnergy.x + 1, (height - 1) / blockSizeEnergy.y + 1);
-        dim3 gridSizeSeams(1);
+        dim3 gridSizeSeams(min((int)(1024 / blockSizeSeams.x) * 8, (curWidth - 1) / blockSizeSeams.x + 1)); // temp values, 1024 is max_threads_per_sm, 8 is max_num_sm
         dim3 gridSizeReduction((curWidth - 1) / blockSizeReduction.x / 2 + 1);
         dim3 gridSizeCarve((curWidth - 1) / blockSizeCarve.x + 1, (height - 1) / blockSizeCarve.y + 1);
 
@@ -147,7 +184,7 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         // compute energy
         computeEnergyKernel<<<gridSizeEnergy, blockSizeEnergy, smemEnergy>>>(d_inPixels1, d_energy, curWidth, height);
         // dynamic programming
-        computeSeamsKernel<<<gridSizeSeams, blockSizeSeams, smemSeams>>>(d_energy, d_dp, curWidth, height);
+        computeSeamsKernel<<<gridSizeSeams, blockSizeSeams, smemSeams>>>(d_energy, d_dp, curWidth, height, d_bFlag, (width - curWidth) & 1);
         // reduction to find min
         minReductionKernel<<<gridSizeReduction, blockSizeReduction, smemReduction>>>(d_dp + (height - 1) * curWidth, curWidth, d_blockMin);
 
@@ -183,6 +220,7 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     CHECK(cudaFree(d_trace));
     CHECK(cudaFree(d_dp));
     CHECK(cudaFree(d_blockMin));
+    CHECK(cudaFree((void *)d_bFlag));
     free(trace);
     free(dp);
     free(blockMin);

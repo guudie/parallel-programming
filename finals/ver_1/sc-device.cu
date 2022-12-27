@@ -110,7 +110,6 @@ __global__ void carveSeamKernel(uchar3* inPixels, int* trace, int width, int hei
 void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth,
         int* xSobel, int* ySobel, dim3 blockSize1D, dim3 blockSize2D)
 {
-    // temp values, used for debugging
     dim3 blockSizeEnergy = blockSize2D;
     dim3 blockSizeSeams = blockSize1D;
     dim3 blockSizeReduction = blockSize1D;
@@ -167,14 +166,6 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
             if(res.x > blockMin[i].x)
                 res = blockMin[i];
         trace[height - 1] = res.y;
-        // int res = dp[(height - 1) * curWidth].x;
-        // trace[height - 1] = 0;
-        // for(int c = 0; c < curWidth; c++) {
-        //     if(res > dp[(height - 1) * curWidth + c].x) {
-        //         res = dp[(height - 1) * curWidth + c].x;
-        //         trace[height - 1] = c;
-        //     }
-        // }
 
         // tracing
         for(int r = height - 1; r > 0; r--) {
