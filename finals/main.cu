@@ -29,6 +29,11 @@ int main(int argc, char** argv) {
     
     int width, height;
     int targetWidth = atoi(argv[2]);
+    if(targetWidth < 1) {
+        printf("Invalid target width\n");
+        return EXIT_FAILURE;
+    }
+    
     uchar3* inPixels;
     readPnm(argv[1], width, height, inPixels);
 	printf("\nImage size (width x height): %i x %i\n", width, height);
