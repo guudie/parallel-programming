@@ -44,14 +44,18 @@ __global__ void computeEnergyKernel(const uchar3* inPixels, int* energy, int wid
 
 // get max number of active blocks at once: ⌊max_threads_per_sm / block_size⌋ * max_num_sm
 // bFlag size: `height` rows x `(width - 1) / blockSize + 1` cols
+// maximum number of elements in a line of s_rows will be ((width - 1) / (block_size * grid_dim) + 1) * block_size
 __global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int height, volatile bool* bFlag, bool prevFlagVal) {
     int bFlagWidth = (width - 1) / blockDim.x + 1;
-    // extern __shared__ int s_rows[]; // stores 2 consecutive rows for faster memory access (now with 2 additional elements at the ends)
+    int s_width = (width - 1) / (gridDim.x * blockDim.x) + 1;
+    s_width *= blockDim.x;
+    extern __shared__ int s_rows[]; // stores 2 consecutive rows for faster memory access
     for(int offsetX = blockIdx.x * blockDim.x; offsetX < width; offsetX += gridDim.x * blockDim.x) {
         int c = offsetX + threadIdx.x;
+        int s_col = offsetX / (gridDim.x * blockDim.x) + threadIdx.x;
         if(c < width) {
             dp[c] = make_int2(energy[c], 0);
-            // s_rows[width + c] = energy[c];
+            s_rows[s_width + s_col] = energy[c];
         }
         __syncthreads();
         if(threadIdx.x == 0) {
@@ -77,18 +81,31 @@ __global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int h
             __syncthreads();
 
             int c = offsetX + threadIdx.x;
+            int s_col = offsetX / (gridDim.x * blockDim.x) + threadIdx.x;
             if(c < width) {
                 int i = r * width + c;
-                int2 res = make_int2(dp[(r - 1) * width + c].x, c);
-                if(c - 1 >= 0)
-                    if(res.x >= dp[(r - 1) * width + c - 1].x)
-                        res = make_int2(dp[(r - 1) * width + c - 1].x, c - 1);
-                if(c + 1 < width)
-                    if(res.x > dp[(r - 1) * width + c + 1].x)
-                        res = make_int2(dp[(r - 1) * width + c + 1].x, c + 1);
+                int2 res = make_int2(s_rows[(r & 1) * s_width + s_col], c);
+                if(c - 1 >= 0) {
+                    if(threadIdx.x == 0) {
+                        if(res.x >= dp[(r - 1) * width + c - 1].x)
+                            res = make_int2(dp[(r - 1) * width + c - 1].x, c - 1);
+                    } else {
+                        if(res.x >= s_rows[(r & 1) * s_width + s_col - 1])
+                            res = make_int2(s_rows[(r & 1) * s_width + s_col - 1], c - 1);
+                    }
+                }
+                if(c + 1 < width) {
+                    if(threadIdx.x == blockDim.x - 1) {
+                        if(res.x > dp[(r - 1) * width + c + 1].x)
+                            res = make_int2(dp[(r - 1) * width + c + 1].x, c + 1);
+                    } else {
+                        if(res.x > s_rows[(r & 1) * s_width + s_col + 1])
+                            res = make_int2(s_rows[(r & 1) * s_width + s_col + 1], c + 1);
+                    }
+                }
                 res.x += energy[i];
                 dp[i] = res;
-                // s_rows[(1 - (r & 1)) * width + c] = res.x;
+                s_rows[(1 - (r & 1)) * s_width + s_col] = res.x;
             }
             __syncthreads();
             if(threadIdx.x == 0) {
@@ -178,7 +195,7 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         dim3 gridSizeCarve((curWidth - 1) / blockSizeCarve.x + 1, (height - 1) / blockSizeCarve.y + 1);
 
         int smemEnergy = (blockSizeEnergy.x + 2) * (blockSizeEnergy.y + 2) * sizeof(uchar3);
-        int smemSeams = 2 * curWidth * sizeof(int);
+        int smemSeams = 2 * ((int)(curWidth - 1) / (gridSizeSeams.x * blockSizeSeams.x) + 1) * blockSizeSeams.x * sizeof(int);
         int smemReduction = 2 * blockSizeReduction.x * sizeof(int2);
 
         // compute energy
