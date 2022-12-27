@@ -92,7 +92,7 @@ __global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int h
             }
             __syncthreads();
             if(threadIdx.x == 0) {
-                bFlag[r * bFlagWidth + offsetX / blockDim.x] = !prevFlagVal;
+                bFlag[r * bFlagWidth + bFlagCol] = !prevFlagVal;
                 // __threadfence();
             }
             // __syncthreads();
