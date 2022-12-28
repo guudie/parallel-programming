@@ -188,9 +188,14 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     CHECK(cudaMemcpyToSymbol(d_xSobel, xSobel, sizeof(int) * 9));
     CHECK(cudaMemcpyToSymbol(d_ySobel, ySobel, sizeof(int) * 9));
 
+    cudaDeviceProp devProp;
+    CHECK(cudaGetDeviceProperties(&devProp, 0));
+    int max_threads_per_SM = devProp.maxThreadsPerMultiProcessor;
+    int num_SM = devProp.multiProcessorCount;
+
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
         dim3 gridSizeEnergy((curWidth - 1) / blockSizeEnergy.x + 1, (height - 1) / blockSizeEnergy.y + 1);
-        dim3 gridSizeSeams(min((int)(1024 / blockSizeSeams.x) * 8, (curWidth - 1) / blockSizeSeams.x + 1)); // temp values, 1024 is max_threads_per_sm, 8 is max_num_sm
+        dim3 gridSizeSeams(min(((int)(max_threads_per_SM / blockSizeSeams.x)) * num_SM, (curWidth - 1) / blockSizeSeams.x + 1));
         dim3 gridSizeReduction((curWidth - 1) / blockSizeReduction.x / 2 + 1);
         dim3 gridSizeCarve((curWidth - 1) / blockSizeCarve.x + 1, (height - 1) / blockSizeCarve.y + 1);
 
