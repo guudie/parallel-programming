@@ -55,8 +55,8 @@ int main(int argc, char** argv) {
 
     printf("Error: %f", getErr(correctOut, deviceOut, targetWidth * height));
 
-    writePnm(correctOut, targetWidth, height, "out_host.pnm");
-    writePnm(deviceOut, targetWidth, height, "out_device.pnm");
+    writePnm(correctOut, targetWidth, height, (char*)"out_host.pnm");
+    writePnm(deviceOut, targetWidth, height, (char*)"out_device.pnm");
 
     free(inPixels);
     free(correctOut);
