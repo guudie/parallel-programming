@@ -10,6 +10,8 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     int* dp = (int*)malloc(sizeof(int) * width * height);
     int* trace = (int*)malloc(sizeof(int) * height);
 
+    int* toUpdateIdx = (int*)malloc(sizeof(int) * 4);
+
     // loop while there are seams to carve
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
         // edge detection convolution
@@ -30,9 +32,8 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
                 }
             }
         } else {
-            // 0: left, 1: right, 2: top, 3: bottom;
-            int* toUpdateIdx = (int*)malloc(sizeof(int) * 4);
             for(int r = 0; r < height; r++) {
+                // 0: left, 1: right, 2: top, 3: bottom;
                 toUpdateIdx[0] = toUpdateIdx[1] = toUpdateIdx[2] = toUpdateIdx[3] = -1;
                 // update the two adjacent pixels of removed seam on row `r`: [r][trace[r] - 1] and [r][trace[r]]
                 if(trace[r] > 0)
@@ -72,7 +73,6 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
                     energy[toUpdateIdx[idx]] = abs(x) + abs(y);
                 }
             }
-            free(toUpdateIdx);
         }
 
         // calculate seams
@@ -125,4 +125,5 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     free(energy);
     free(dp);
     free(trace);
+    free(toUpdateIdx);
 }
