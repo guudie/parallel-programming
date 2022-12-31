@@ -138,7 +138,7 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     for(int i = 0; i < 2; i++)
         CHECK(cudaStreamCreate(streams + i));
     CHECK(cudaHostRegister(dp, sizeof(int2) * width * height, cudaHostRegisterDefault));
-    CHECK(cudaHostRegister(trace, sizeof(int) * height, cudaHostRegisterDefault));
+    CHECK(cudaHostRegister(blockMin, sizeof(int2) * ((width - 1) / blockSizeReduction.x / 2 + 1), cudaHostRegisterDefault));
 
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
         dim3 gridSizeEnergy((curWidth - 1) / blockSizeEnergy.x + 1, (height - 1) / blockSizeEnergy.y + 1);
