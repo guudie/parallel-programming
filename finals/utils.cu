@@ -55,12 +55,6 @@ void writePnm(uchar3 * pixels, int width, int height, char * fileName)
 	fclose(f);
 }
 
-void swapPtr(uchar3*& a, uchar3*& b) {
-    uchar3* tmp = a;
-    a = b;
-    b = tmp;
-}
-
 float getErr(const uchar3* a, const uchar3* b, int n) {
     float ans = 0;
     for(int i = 0; i < n; i++) {

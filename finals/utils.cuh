@@ -53,9 +53,15 @@ struct GpuTimer
     }
 };
 
+template<typename T>
+void swapPtr(T*& a, T*& b) {
+    T* tmp = a;
+    a = b;
+    b = tmp;
+}
+
 void readPnm(char * fileName, int &width, int &height, uchar3 * &pixels);
 void writePnm(uchar3 * pixels, int width, int height, char * fileName);
-void swapPtr(uchar3*& a, uchar3*& b);
 float getErr(const uchar3* a, const uchar3* b, int n);
 void printDeviceInfo();
 
