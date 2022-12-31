@@ -7,7 +7,7 @@ __constant__ int d_xSobel[9];
 __constant__ int d_ySobel[9];
 
 __global__ void computeEnergyKernel(const uchar3* inPixels, int* energy, int width, int height);
-__global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int height, volatile bool* bFlag, bool prevFlagVal);
+__global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int height);
 __global__ void minReductionKernel(const int2* dp_lastRow, int width, int2* blockMin);
 __global__ void carveSeamKernel(uchar3* inPixels1, uchar3* inPixels2, int* trace, int width, int height);
 void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth,
