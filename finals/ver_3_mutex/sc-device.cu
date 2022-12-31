@@ -196,6 +196,9 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
 
     for(int i = 0; i < 2; i++)
         CHECK(cudaStreamDestroy(streams[i]));
+    CHECK(cudaHostUnregister(dp));
+    CHECK(cudaHostUnregister(trace));
+    CHECK(cudaHostUnregister(initialPos));
 
     CHECK(cudaFree(d_inPixels1));
     CHECK(cudaFree(d_inPixels2));
