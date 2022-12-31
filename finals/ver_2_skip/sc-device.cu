@@ -232,9 +232,7 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         CHECK(cudaGetLastError());
 
         swapPtr(d_inPixels1, d_inPixels2);
-        int* tmp = d_energy1;
-        d_energy1 = d_energy2;
-        d_energy2 = tmp;
+        swapPtr(d_energy1, d_energy2);
     }
 
     CHECK(cudaMemcpy(outPixels, d_inPixels1, sizeof(uchar3) * targetWidth * height, cudaMemcpyDeviceToHost));
