@@ -146,6 +146,12 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
 
     int initialPos = -1;
 
+    cudaStream_t streams[2];
+    for(int i = 0; i < 2; i++)
+        CHECK(cudaStreamCreate(streams + i));
+    CHECK(cudaHostRegister(dp, sizeof(int2) * width * height, cudaHostRegisterDefault));
+    CHECK(cudaHostRegister(trace, sizeof(int) * height, cudaHostRegisterDefault));
+
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
         dim3 gridSizeEnergy((curWidth - 1) / blockSizeEnergy.x + 1, (height - 1) / blockSizeEnergy.y + 1);
         dim3 gridSizeSeams(1);
@@ -163,10 +169,12 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         // dynamic programming
         computeSeamsKernel<<<gridSizeSeams, blockSizeSeams, smemSeams>>>(d_energy, d_dp, curWidth, height);
         // reduction to find min
-        minReductionKernel<<<gridSizeReduction, blockSizeReduction, smemReduction>>>(d_dp + (height - 1) * curWidth, curWidth);
+        minReductionKernel<<<gridSizeReduction, blockSizeReduction, smemReduction, streams[0]>>>(d_dp + (height - 1) * curWidth, curWidth);
+        CHECK(cudaMemcpyFromSymbolAsync(&trace[height - 1], reductionPos, sizeof(int), 0, cudaMemcpyDeviceToHost, streams[0]));
 
-        CHECK(cudaMemcpyFromSymbol(&trace[height - 1], reductionPos, sizeof(int)));
-        CHECK(cudaMemcpy(dp, d_dp, sizeof(int2) * curWidth * height, cudaMemcpyDeviceToHost));
+        CHECK(cudaMemcpyAsync(dp, d_dp, sizeof(int2) * curWidth * height, cudaMemcpyDeviceToHost, streams[1]));
+
+        cudaDeviceSynchronize();
 
         // tracing
         for(int r = height - 1; r > 0; r--) {
@@ -184,6 +192,9 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     }
 
     CHECK(cudaMemcpy(outPixels, d_inPixels1, sizeof(uchar3) * targetWidth * height, cudaMemcpyDeviceToHost));
+
+    for(int i = 0; i < 2; i++)
+        CHECK(cudaStreamDestroy(streams[i]));
 
     CHECK(cudaFree(d_inPixels1));
     CHECK(cudaFree(d_inPixels2));
