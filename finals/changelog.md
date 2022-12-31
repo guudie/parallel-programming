@@ -9,3 +9,9 @@
 - Performance evaluation:
   - Avg execution time: ... ms (... runs)
   - Significant reduction in execution time
+
+## Version 3 (baseline: ver 2)
+- `seamCarvingGpu()` has been updated to use streams (*`minReductionKernel()` + `blockMin` memcpy* and *`dp` memcpy* are now asynchronous)
+- Performance evaluation:
+  - Avg execution time: ... ms (... runs)
+  - Even more time shaved

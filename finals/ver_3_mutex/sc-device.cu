@@ -144,13 +144,15 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     CHECK(cudaMemcpyToSymbol(d_xSobel, xSobel, sizeof(int) * 9));
     CHECK(cudaMemcpyToSymbol(d_ySobel, ySobel, sizeof(int) * 9));
 
-    int initialPos = -1;
+    int *initialPos = (int*)malloc(sizeof(int));
+    *initialPos = -1;
 
     cudaStream_t streams[2];
     for(int i = 0; i < 2; i++)
         CHECK(cudaStreamCreate(streams + i));
     CHECK(cudaHostRegister(dp, sizeof(int2) * width * height, cudaHostRegisterDefault));
     CHECK(cudaHostRegister(trace, sizeof(int) * height, cudaHostRegisterDefault));
+    CHECK(cudaHostRegister(initialPos, sizeof(int), cudaHostRegisterDefault));
 
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
         dim3 gridSizeEnergy((curWidth - 1) / blockSizeEnergy.x + 1, (height - 1) / blockSizeEnergy.y + 1);
@@ -162,13 +164,12 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         int smemSeams = 2 * curWidth * sizeof(int);
         int smemReduction = 2 * blockSizeReduction.x * sizeof(int2);
 
-        CHECK(cudaMemcpyToSymbol(reductionPos, &initialPos, sizeof(int)));
-
         // compute energy
         computeEnergyKernel<<<gridSizeEnergy, blockSizeEnergy, smemEnergy>>>(d_inPixels1, d_energy, curWidth, height);
         // dynamic programming
         computeSeamsKernel<<<gridSizeSeams, blockSizeSeams, smemSeams>>>(d_energy, d_dp, curWidth, height);
         // reduction to find min
+        CHECK(cudaMemcpyToSymbolAsync(reductionPos, initialPos, sizeof(int), 0, cudaMemcpyHostToDevice, streams[0]));
         minReductionKernel<<<gridSizeReduction, blockSizeReduction, smemReduction, streams[0]>>>(d_dp + (height - 1) * curWidth, curWidth);
         CHECK(cudaMemcpyFromSymbolAsync(&trace[height - 1], reductionPos, sizeof(int), 0, cudaMemcpyDeviceToHost, streams[0]));
 
@@ -203,4 +204,5 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     CHECK(cudaFree(d_dp));
     free(trace);
     free(dp);
+    free(initialPos);
 }

@@ -32,3 +32,6 @@ for
     __syncthreads()
     for threadIdx, active_threads + threadIdx, active_threads * 2 + threadIdx, ....
         __syncthreads()
+
+
+### streams execution order
