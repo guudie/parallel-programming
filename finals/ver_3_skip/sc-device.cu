@@ -188,6 +188,12 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     CHECK(cudaMemcpyToSymbol(d_xSobel, xSobel, sizeof(int) * 9));
     CHECK(cudaMemcpyToSymbol(d_ySobel, ySobel, sizeof(int) * 9));
 
+    cudaStream_t streams[2];
+    for(int i = 0; i < 2; i++)
+        CHECK(cudaStreamCreate(streams + i));
+    CHECK(cudaHostRegister(dp, sizeof(int2) * width * height, cudaHostRegisterDefault));
+    CHECK(cudaHostRegister(blockMin, sizeof(int2) * ((width - 1) / blockSizeReduction.x / 2 + 1), cudaHostRegisterDefault));
+
     dim3 gridSizeEnergy((width - 1) / blockSizeEnergy.x + 1, (height - 1) / blockSizeEnergy.y + 1);
     dim3 gridSizeEnergySkip((height - 1) / blockSizeEnergySkip.x + 1);
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
@@ -208,10 +214,12 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         // dynamic programming
         computeSeamsKernel<<<gridSizeSeams, blockSizeSeams, smemSeams>>>(d_energy1, d_dp, curWidth, height);
         // reduction to find min
-        minReductionKernel<<<gridSizeReduction, blockSizeReduction, smemReduction>>>(d_dp + (height - 1) * curWidth, curWidth, d_blockMin);
+        minReductionKernel<<<gridSizeReduction, blockSizeReduction, smemReduction, streams[0]>>>(d_dp + (height - 1) * curWidth, curWidth, d_blockMin);
+        CHECK(cudaMemcpyAsync(blockMin, d_blockMin, sizeof(int2) * gridSizeReduction.x, cudaMemcpyDeviceToHost, streams[0]));
 
-        CHECK(cudaMemcpy(blockMin, d_blockMin, sizeof(int2) * gridSizeReduction.x, cudaMemcpyDeviceToHost));
-        CHECK(cudaMemcpy(dp, d_dp, sizeof(int2) * curWidth * height, cudaMemcpyDeviceToHost));
+        CHECK(cudaMemcpyAsync(dp, d_dp, sizeof(int2) * curWidth * height, cudaMemcpyDeviceToHost, streams[1]));
+
+        cudaDeviceSynchronize();
 
         int2 res = blockMin[0];
         for(int i = 1; i < gridSizeReduction.x; i++)
@@ -236,6 +244,11 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     }
 
     CHECK(cudaMemcpy(outPixels, d_inPixels1, sizeof(uchar3) * targetWidth * height, cudaMemcpyDeviceToHost));
+
+    for(int i = 0; i < 2; i++)
+        CHECK(cudaStreamDestroy(streams[i]));
+    CHECK(cudaHostUnregister(dp));
+    CHECK(cudaHostUnregister(blockMin));
 
     CHECK(cudaFree(d_inPixels1));
     CHECK(cudaFree(d_inPixels2));
