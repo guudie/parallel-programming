@@ -1,4 +1,4 @@
-.PHONY: all run clean
+.PHONY: all direct run clean
 
 VER = 1
 CC = 61
@@ -11,6 +11,9 @@ GARBAGE := *.o *.exe *.exp *.lib
 GARBAGE_SUBDIR := $(foreach PAT,$(GARBAGE),$(addprefix ./*/,$(PAT)))
 
 all: utils.o ./ver_$(VER)/sc-device_v$(VER).o sc-host.o main_v$(VER).o seam-carving_v$(VER)
+
+direct:
+	$(NVCC) $(ARC) $(CUDAARGS) -O2 -I. -I./ver_$(VER) main.cu utils.cu sc-host.cu ./ver_$(VER)/sc-device.cu -o seam-carving_v$(VER)
 
 utils.o: utils.cuh utils.cu
 	$(NVCC) $(ARC) -c utils.cu -o utils.o
