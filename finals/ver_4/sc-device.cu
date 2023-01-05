@@ -153,7 +153,7 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
         int* xSobel, int* ySobel, dim3 blockSize1D, dim3 blockSize2D)
 {
     dim3 blockSizeEnergy = blockSize2D;
-    dim3 blockSizeSeams = blockSize1D;
+    dim3 blockSizeSeams = dim3(256); // blockDim1D;
     dim3 blockSizeReduction = blockSize1D;
     dim3 blockSizeCarve = blockSize2D;
     ///////////////////////////////////////////
