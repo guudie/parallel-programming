@@ -45,6 +45,7 @@ __global__ void computeEnergyKernel(const uchar3* inPixels, int* energy, int wid
 // get max number of active blocks at once: ⌊max_threads_per_sm / block_size⌋ * max_num_sm
 // bFlag size: `height` rows x `(width - 1) / blockSize + 1` cols
 // maximum number of elements in a line of s_rows will be ((width - 1) / (block_size * grid_dim) + 1) * block_size
+// bFlag contains the waiting flag; prevFlagVal is the value of bFlag in the previous run
 __global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int height, volatile bool* bFlag, bool prevFlagVal) {
     int bFlagWidth = (width - 1) / blockDim.x + 1;
     int s_width = (width - 1) / (gridDim.x * blockDim.x) + 1;
@@ -67,6 +68,7 @@ __global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int h
     }
     
     for(int r = 1; r < height; r++) {
+        // stride = gridDim.x * blockDim.x
         for(int offsetX = blockIdx.x * blockDim.x; offsetX < width; offsetX += gridDim.x * blockDim.x) {
             int bFlagCol = offsetX / blockDim.x;
             if(threadIdx.x == 0) {
@@ -201,7 +203,7 @@ void seamCarvingGpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
 
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
         dim3 gridSizeEnergy((curWidth - 1) / blockSizeEnergy.x + 1, (height - 1) / blockSizeEnergy.y + 1);
-        dim3 gridSizeSeams(min(((int)(max_threads_per_SM / blockSizeSeams.x)) * num_SM, (curWidth - 1) / blockSizeSeams.x + 1));
+        dim3 gridSizeSeams(min(((int)(max_threads_per_SM / blockSizeSeams.x)) * num_SM, (curWidth - 1) / blockSizeSeams.x + 1));    // limits the number of active blocks to avoid deadlock
         dim3 gridSizeReduction((curWidth - 1) / blockSizeReduction.x / 2 + 1);
         dim3 gridSizeCarve((curWidth - 1) / blockSizeCarve.x + 1, (height - 1) / blockSizeCarve.y + 1);
 

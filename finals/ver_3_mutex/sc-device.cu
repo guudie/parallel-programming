@@ -89,7 +89,7 @@ __global__ void minReductionKernel(const int2* dp_lastRow, int width) {
 
     if(threadIdx.x == 0) {
         // mutex lock
-        while(atomicCAS(&mutex, 0, 1) != 0);
+        while(atomicCAS(&mutex, 0, 1) != 0);    // equivalent to mutex = (mutex == 0) ? 1 : mutex;
 
         // critical section
         int2 a = {reductionRes, reductionPos}, b = s_data[0];

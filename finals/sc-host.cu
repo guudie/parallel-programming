@@ -15,6 +15,7 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
     // loop while there are seams to carve
     for(int curWidth = width; curWidth > targetWidth; curWidth--) {
         // edge detection convolution
+        // first run
         if(curWidth == width) {
             for(int r = 0; r < height; r++) {
                 for(int c = 0; c < curWidth; c++) {
@@ -31,6 +32,7 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
                     energy[r * curWidth + c] = abs(x) + abs(y);
                 }
             }
+        // second run and onwards, removed redundant calculations of pixels that are not neighbors of previously removed seam
         } else {
             for(int r = 0; r < height; r++) {
                 // 0: left, 1: right, 2: top, 3: bottom;
@@ -103,6 +105,7 @@ void seamCarvingCpu(const uchar3* inPixels, uchar3* outPixels, int width, int he
 
         // tracing
         for(int r = height - 1; r > 0; r--) {
+            // find left most column from the top that meets the requirement
             for(int c_top = max(0, trace[r] - 1); c_top <= min(trace[r] + 1, curWidth - 1); c_top++) {
                 if(dp[(r - 1) * curWidth + c_top] + energy[r * curWidth + trace[r]] == dp[r * curWidth + trace[r]]) {
                     trace[r-1] = c_top;

@@ -46,7 +46,7 @@ __global__ void computeEnergyKernel(const uchar3* inPixels, int* energy, int wid
 __global__ void computeSeamsKernel(const int* energy, int2* dp, int width, int height) {
     extern __shared__ int s_rows[]; // stores 2 consecutive rows for faster memory access
     for(int c = threadIdx.x; c < width; c += blockDim.x) {
-        dp[c] = make_int2(energy[c], 0);
+        dp[c] = make_int2(energy[c], 0);    // stores dp results and keeps trace
         s_rows[width + c] = energy[c];
     }
     __syncthreads();

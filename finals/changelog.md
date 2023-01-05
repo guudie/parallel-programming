@@ -15,3 +15,6 @@
 - Performance evaluation:
   - Avg execution time: ... ms (... runs)
   - Even more time shaved
+  
+## Version 4 (baseline: ver 3)
+- `computeSeamsKernel()` now uses more than one block
