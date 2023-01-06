@@ -1,6 +1,17 @@
+#ifndef DONT_RUN_ON_HOST
+    #define RUN_ON_HOST
+#endif
+#ifndef DONT_RUN_ON_DEVICE
+    #define RUN_ON_DEVICE
+#endif
+
 #include "utils.cuh"
-#include "host.cuh"
-#include "device.cuh"
+#ifdef RUN_ON_HOST
+    #include "host.cuh"
+#endif
+#ifdef RUN_ON_DEVICE
+    #include "device.cuh"
+#endif
 
 void seamCarving(const uchar3* inPixels, uchar3* outPixels, int width, int height, int targetWidth,
         int* xSobel, int* ySobel, dim3 blockSize1D=dim3(1024), dim3 blockSize2D=dim3(32, 32), bool useDevice=false) 
@@ -8,9 +19,13 @@ void seamCarving(const uchar3* inPixels, uchar3* outPixels, int width, int heigh
     GpuTimer timer;
 	timer.Start();
     if(!useDevice) {
-        seamCarvingCpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel);
+        #ifdef RUN_ON_HOST
+            seamCarvingCpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel);
+        #endif
     } else {
-        seamCarvingGpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel, blockSize1D, blockSize2D);
+        #ifdef RUN_ON_DEVICE
+            seamCarvingGpu(inPixels, outPixels, width, height, targetWidth, xSobel, ySobel, blockSize1D, blockSize2D);
+        #endif
     }
     timer.Stop();
 	float time = timer.Elapsed();
@@ -25,7 +40,9 @@ int main(int argc, char** argv) {
 		return EXIT_FAILURE;
 	}
 
-	printDeviceInfo();
+    #ifdef RUN_ON_DEVICE
+	    printDeviceInfo();
+    #endif
     
     int width, height;
     int targetWidth = atoi(argv[2]);
@@ -45,21 +62,31 @@ int main(int argc, char** argv) {
                        0,  0,  0,
                       -1, -2, -1 };
 
-    uchar3* correctOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
-    seamCarving(inPixels, correctOut, width, height, targetWidth, xSobel, ySobel, false);
+    #ifdef RUN_ON_HOST
+        uchar3* correctOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
+        seamCarving(inPixels, correctOut, width, height, targetWidth, xSobel, ySobel, false);
+    #endif
 
-    dim3 blockSize1D(1024);
-    dim3 blockSize2D(32, 32);
-    uchar3* deviceOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
-    seamCarving(inPixels, deviceOut, width, height, targetWidth, xSobel, ySobel, blockSize1D, blockSize2D, true);
+    #ifdef RUN_ON_DEVICE
+        dim3 blockSize1D(1024);
+        dim3 blockSize2D(32, 32);
+        uchar3* deviceOut = (uchar3*)malloc(sizeof(uchar3) * targetWidth * height);
+        seamCarving(inPixels, deviceOut, width, height, targetWidth, xSobel, ySobel, blockSize1D, blockSize2D, true);
+    #endif
 
-    printf("Error: %f", getErr(correctOut, deviceOut, targetWidth * height));
+    #if defined(RUN_ON_HOST) && defined(RUN_ON_DEVICE)
+        printf("Error: %f", getErr(correctOut, deviceOut, targetWidth * height));
+    #endif
 
-    writePnm(correctOut, targetWidth, height, (char*)"out_host.pnm");
-    writePnm(deviceOut, targetWidth, height, (char*)"out_device.pnm");
+    #ifdef RUN_ON_HOST
+        writePnm(correctOut, targetWidth, height, (char*)"out_host.pnm");
+        free(correctOut);
+    #endif
+    #ifdef RUN_ON_DEVICE
+        writePnm(deviceOut, targetWidth, height, (char*)"out_device.pnm");
+        free(deviceOut);
+    #endif
 
     free(inPixels);
-    free(correctOut);
-    free(deviceOut);
 }
 
