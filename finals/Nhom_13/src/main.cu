@@ -79,13 +79,14 @@ int main(int argc, char** argv) {
     #endif
 
     char* outFileNameBase = strtok(argv[1], ".");
+    char* tmpName;
     #ifdef RUN_ON_HOST
-        char* tmpName = concatStr(outFileNameBase, argv[2]);
+        tmpName = concatStr(outFileNameBase, argv[2]);
         writePnm(correctOut, targetWidth, height, concatStr(tmpName, (char*)"_host.pnm"));
         free(correctOut);
     #endif
     #ifdef RUN_ON_DEVICE
-        char* tmpName = concatStr(outFileNameBase, argv[2]);
+        tmpName = concatStr(outFileNameBase, argv[2]);
         writePnm(deviceOut, targetWidth, height, concatStr(tmpName, (char*)"_device.pnm"));
         free(deviceOut);
     #endif
