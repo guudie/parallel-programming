@@ -64,5 +64,6 @@ void readPnm(char * fileName, int &width, int &height, uchar3 * &pixels);
 void writePnm(uchar3 * pixels, int width, int height, char * fileName);
 float getErr(const uchar3* a, const uchar3* b, int n);
 void printDeviceInfo();
+char* concatStr(const char* s1, const char* s2);
 
 #endif

@@ -34,7 +34,7 @@ void seamCarving(const uchar3* inPixels, uchar3* outPixels, int width, int heigh
 
 // inputs: filename, target width, block size (optional)
 int main(int argc, char** argv) {
-    if (argc > 4)
+    if (argc > 3)
 	{
 		printf("The number of arguments is invalid\n");
 		return EXIT_FAILURE;
@@ -78,12 +78,13 @@ int main(int argc, char** argv) {
         printf("Error: %f", getErr(correctOut, deviceOut, targetWidth * height));
     #endif
 
+    char* outFileNameBase = strtok(argv[1], ".");
     #ifdef RUN_ON_HOST
-        writePnm(correctOut, targetWidth, height, (char*)"out_host.pnm");
+        writePnm(correctOut, targetWidth, height, concatStr(outFileNameBase, (char*)"_host.pnm"));
         free(correctOut);
     #endif
     #ifdef RUN_ON_DEVICE
-        writePnm(deviceOut, targetWidth, height, (char*)"out_device.pnm");
+        writePnm(deviceOut, targetWidth, height, concatStr(outFileNameBase, (char*)"_device.pnm"));
         free(deviceOut);
     #endif
 
